@@ -1,0 +1,227 @@
+{
+  "_notice": "Fichier de référence fournisseur — DataScientest / Liora. Les champs marqués [A COMPLETER] doivent être renseignés manuellement dans l'app.",
+  "entites": {
+    "france": {
+      "nom_commercial": "LIORA",
+      "nom_juridique": "DATASCIENTEST",
+      "nom_alternatif": "Liora",
+      "identifiants": {
+        "SIREN": "831450069",
+        "SIRET_siege": "83145006900024",
+        "SIRET_etablissements_secondaires": {
+          "Courbevoie_92400": "83145006900040",
+          "Puteaux_92800": "83145006900032",
+          "Paris_75016_Flandrin": "83145006900016",
+          "Paris_75016_Barcelone_2": "83145006900057"
+        },
+        "TVA_intracommunautaire": "FR69831450069",
+        "code_NAF_APE": "8559A",
+        "libelle_NAF": "Formation continue d'adultes",
+        "RCS": "831 450 069 RCS Paris",
+        "UAI": "0923015C",
+        "NDA": "11755665975",
+        "numero_Qualiopi": "B01084",
+        "DUNS": "[A COMPLETER si disponible]"
+      },
+      "forme_juridique": {
+        "type": "Société par actions simplifiée (SAS)",
+        "code_forme_juridique": "5710",
+        "capital_social": "2 513 €",
+        "date_creation": "11/08/2017",
+        "exercice_social": "Du 1er juillet au 30 juin"
+      },
+      "siege_social": {
+        "adresse_ligne1": "2 Place de Barcelone",
+        "adresse_ligne2": "",
+        "code_postal": "75016",
+        "ville": "Paris",
+        "pays": "France",
+        "adresse_complete": "2 Place de Barcelone, 75016 Paris, France"
+      },
+      "coordonnees": {
+        "telephone": "09 80 80 79 49",
+        "email_facturation": "billing@liora.io",
+        "email_contact": "contact@liora.io",
+        "site_web": "liora.io"
+      },
+      "dirigeants": {
+        "president": "EDUCIN TOPCO",
+        "directeur_general": "EDUCIN TOPCO",
+        "representant_legal_nom": "EDUCIN TOPCO",
+        "representant_legal_prenom": "",
+        "representant_legal_qualite": "Président"
+      },
+      "bancaire": {
+        "banque": "BNP PARIBAS",
+        "domiciliation": "83 bd Sebastopol, 75002 Paris",
+        "IBAN": "FR76 3000 4028 3700 0113 0486 194",
+        "BIC": "BNPAFRPPXXX",
+        "RIB_titulaire": "DATASCIENTEST",
+        "RIB_banque": "30004",
+        "RIB_guichet": "02837",
+        "RIB_numero_compte": "00011304861",
+        "RIB_cle": "94"
+      },
+      "donnees_financieres": {
+        "chiffre_affaires_N1": "21 029 000 €",
+        "chiffre_affaires_N1_libelle": "Exercice clos au 30/06/2024",
+        "chiffre_affaires_N": "28 048 000 €",
+        "chiffre_affaires_N_libelle": "Exercice clos au 30/06/2025",
+        "effectif_actuel": "120",
+        "_notice_maj": "Mettre à jour annuellement après clôture de l'exercice"
+      },
+      "contacts": {
+        "service_comptabilite_facturation": {
+          "nom": "NGAN",
+          "prenom": "Cédric",
+          "civilite": "M.",
+          "email": "billing@liora.io",
+          "telephone": "07 55 52 08 49",
+          "intitule_poste": "Responsable ADV"
+        },
+        "responsable_commercial": {
+          "nom": "LOTH",
+          "prenom": "Nathan",
+          "civilite": "M.",
+          "email": "nathan@liora.io",
+          "telephone": "[A COMPLETER]",
+          "intitule_poste": "Directeur B2B"
+        }
+      },
+      "documents_a_joindre": {
+        "kbis": {
+          "description": "Extrait Kbis de moins de 6 mois",
+          "fichier": "[A ATTACHER — fichier PDF à télécharger sur infogreffe.fr]",
+          "date_obtention": "Mars 2026",
+          "_notice_maj": "Renouvellement tous les 3 mois — prochain renouvellement : juin 2026"
+        },
+        "attestation_vigilance_urssaf": {
+          "description": "Attestation de vigilance URSSAF",
+          "fichier": "[A ATTACHER]",
+          "date_obtention": "Mars 2026",
+          "_notice_maj": "Renouvellement tous les 3 mois — prochain renouvellement : juin 2026"
+        },
+        "attestation_qualiopi": {
+          "description": "Certificat Qualiopi",
+          "fichier": "[A ATTACHER]",
+          "date_validite": "29/12/2027"
+        },
+        "_sharepoint": {
+          "description": "Dossier SharePoint centralisant tous les documents officiels de l'entreprise",
+          "url": "[A COMPLETER — URL du dossier SharePoint]",
+          "documents_disponibles": [
+            "Kbis (à renouveler tous les 3 mois)",
+            "Attestation URSSAF (à renouveler tous les 3 mois)",
+            "Attestation assurance AXA (à renouveler annuellement)",
+            "Certificat Qualiopi (valide jusqu'au 29/12/2027)",
+            "RIB",
+            "Statuts"
+          ]
+        }
+      },
+      "assurance": {
+        "assureur": "AXA",
+        "numero_police": "6055097904",
+        "attestation_validite": "Valide du 01/01/2026 au 31/12/2026",
+        "_notice_maj": "Renouvellement annuel — mettre à jour chaque janvier"
+      },
+      "certifications": {
+        "Qualiopi": "Oui",
+        "date_validite_Qualiopi": "Valide du 30/12/2024 au 29/12/2027",
+        "certificateur_Qualiopi": "ICPF",
+        "autres_certifications": "[A COMPLETER — ex: ISO, labels...]",
+        "numero_Qualiopi": "B01084"
+      },
+      "aliases_champs_connus": {
+        "N° SIRET": "SIRET_siege",
+        "Siret fournisseur": "SIRET_siege",
+        "Identification fiscale": "SIRET_siege",
+        "N° SIREN": "SIREN",
+        "Siren": "SIREN",
+        "Code APE": "code_NAF_APE",
+        "Code NAF": "code_NAF_APE",
+        "N° TVA": "TVA_intracommunautaire",
+        "TVA intracom": "TVA_intracommunautaire",
+        "Numéro de TVA intracommunautaire": "TVA_intracommunautaire",
+        "N° UAI": "UAI",
+        "Code UAI": "UAI",
+        "NDA": "NDA",
+        "Numéro de déclaration d'activité": "NDA",
+        "Forme juridique": "forme_juridique.type",
+        "Capital": "forme_juridique.capital_social",
+        "Adresse siège": "siege_social.adresse_complete",
+        "Adresse de facturation": "siege_social.adresse_complete",
+        "IBAN": "bancaire.IBAN",
+        "BIC": "bancaire.BIC",
+        "SWIFT": "bancaire.BIC",
+        "Domiciliation bancaire": "bancaire.domiciliation",
+        "RIB": "bancaire (IBAN + BIC + domiciliation)",
+        "Chiffre d'affaires": "donnees_financieres.chiffre_affaires_N1",
+        "CA N-1": "donnees_financieres.chiffre_affaires_N1",
+        "Effectif": "donnees_financieres.effectif_actuel",
+        "Nombre de salaries": "donnees_financieres.effectif_actuel",
+        "Effectif actuel": "donnees_financieres.effectif_actuel",
+        "Contact facturation": "contacts.service_comptabilite_facturation",
+        "Service comptabilite": "contacts.service_comptabilite_facturation",
+        "Responsable facturation": "contacts.service_comptabilite_facturation",
+        "Responsable commercial": "contacts.responsable_commercial",
+        "Kbis": "documents_a_joindre.kbis",
+        "Extrait Kbis": "documents_a_joindre.kbis"
+      }
+    },
+    "allemagne": {
+      "nom_commercial": "DataScientest Germany",
+      "nom_juridique": "[A COMPLETER — raison sociale exacte]",
+      "nom_alternatif": "Liora Germany",
+      "identifiants": {
+        "Handelsregisternummer": "[A COMPLETER — numéro RCS allemand]",
+        "Steuernummer": "[A COMPLETER — numéro fiscal allemand]",
+        "USt-IdNr": "[A COMPLETER — TVA intracommunautaire allemande, format DE...]",
+        "Amtsgericht": "[A COMPLETER — tribunal de commerce compétent]"
+      },
+      "forme_juridique": {
+        "type": "[A COMPLETER — ex: GmbH, UG...]",
+        "capital_social": "[A COMPLETER]",
+        "date_creation": "[A COMPLETER]"
+      },
+      "siege_social": {
+        "adresse_ligne1": "[A COMPLETER]",
+        "adresse_ligne2": "",
+        "code_postal": "[A COMPLETER]",
+        "ville": "[A COMPLETER]",
+        "pays": "Deutschland",
+        "adresse_complete": "[A COMPLETER]"
+      },
+      "coordonnees": {
+        "telephone": "[A COMPLETER]",
+        "email_facturation": "[A COMPLETER]",
+        "email_contact": "[A COMPLETER]",
+        "site_web": "[A COMPLETER]"
+      },
+      "dirigeants": {
+        "geschaeftsfuehrer": "[A COMPLETER — Geschäftsführer / gérant]",
+        "representant_legal_nom": "[A COMPLETER]",
+        "representant_legal_prenom": "[A COMPLETER]"
+      },
+      "bancaire": {
+        "banque": "[A COMPLETER]",
+        "domiciliation": "[A COMPLETER]",
+        "IBAN": "[A COMPLETER — format DE...]",
+        "BIC": "[A COMPLETER]",
+        "RIB_titulaire": "[A COMPLETER]"
+      },
+      "certifications": {
+        "certifications_allemandes": "[A COMPLETER — ex: AZAV pour organisme de formation]"
+      }
+    },
+    "_notice_perimetre": "Seule l'entité France est active dans cette version de l'app. L'entité Allemagne est conservée dans ce fichier pour usage futur mais exclue du périmètre applicatif."
+  },
+  "champs_appris": {
+    "_notice": "Cette section est complétée automatiquement par l'app quand un chargé ADV mémorise un nouveau champ inconnu.",
+    "exemples": {
+      "Code_EDI": "[valeur à renseigner si demandé]",
+      "Reference_acheteur_interne": "[valeur à renseigner si demandé]",
+      "Categorie_fournisseur": "Organisme de formation / Prestataire de services"
+    }
+  }
+}
