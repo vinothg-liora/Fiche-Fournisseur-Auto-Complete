@@ -17,23 +17,47 @@ function renderVerificationTable(result) {
 
     const tr = document.createElement('tr');
     const confClass = `confidence-${champ.confiance}`;
-    // Only auto-validate if we have a real value from company_data (not an instruction from Claude)
     const hasRealValue = knownValue && knownValue.length > 0;
     const needsValidation = !hasRealValue;
+
+    // Check if this cell has dropdown options
+    const cellRef = (champ.cellule_ou_position || '').toUpperCase();
+    const dropdownOptions = APP.dataValidations?.[cellRef] || [];
+    // Also try matching by label in menu columns
+    const labelLower = (champ.label_original || '').toLowerCase();
+    let menuOptions = dropdownOptions;
+    if (menuOptions.length === 0 && APP.dataValidations) {
+      for (const [key, opts] of Object.entries(APP.dataValidations)) {
+        if (key.startsWith('_menu_') && labelLower.includes(key.replace('_menu_', '').toLowerCase())) {
+          menuOptions = opts;
+          break;
+        }
+      }
+    }
+
+    // Build value input: dropdown if options available, otherwise text input
+    let valueHtml;
+    if (menuOptions.length > 0 && needsValidation) {
+      valueHtml = `<select class="field-input field-select" id="input_field_${idx}"
+                     data-field-idx="${idx}" data-needs-validation="${needsValidation}">
+                     <option value="">— Sélectionner —</option>
+                     ${menuOptions.map(opt => `<option value="${escapeHtml(opt)}" ${opt === prefilledValue ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
+                   </select>`;
+    } else {
+      valueHtml = `<input type="text" class="field-input ${needsValidation ? '' : 'validated'}"
+                     id="input_field_${idx}"
+                     value="${escapeHtml(prefilledValue)}"
+                     data-field-idx="${idx}"
+                     data-needs-validation="${needsValidation}"
+                     ${!needsValidation ? 'readonly' : ''}>`;
+    }
 
     tr.innerHTML = `
       <td title="${escapeHtml(champ.justification || '')}">${escapeHtml(champ.label_original)}</td>
       <td><code>${escapeHtml(champ.cellule_ou_position)}</code></td>
       <td>${escapeHtml(champ.categorie_identifiee)}</td>
       <td><span class="confidence-badge ${confClass}">${champ.confiance}</span></td>
-      <td>
-        <input type="text" class="field-input ${needsValidation ? '' : 'validated'}"
-               id="input_field_${idx}"
-               value="${escapeHtml(prefilledValue)}"
-               data-field-idx="${idx}"
-               data-needs-validation="${needsValidation}"
-               ${!needsValidation ? 'readonly' : ''}>
-      </td>
+      <td>${valueHtml}</td>
       <td>
         ${needsValidation ?
           `<button class="btn btn-sm btn-secondary" onclick="validateField(${idx})">✓ Valider</button>` :
@@ -91,8 +115,10 @@ function renderVerificationTable(result) {
     });
   });
 
+  // Handle both input and select changes
   document.querySelectorAll('.field-input').forEach(input => {
-    input.addEventListener('input', (e) => {
+    const eventType = input.tagName === 'SELECT' ? 'change' : 'input';
+    input.addEventListener(eventType, (e) => {
       const fieldIdx = e.target.dataset.fieldIdx;
       const unknownIdx = e.target.dataset.unknownIdx;
       if (fieldIdx !== undefined) APP.fieldValues[`field_${fieldIdx}`] = e.target.value;
@@ -112,11 +138,26 @@ function validateField(idx) {
   }
   input.classList.add('validated');
   input.dataset.needsValidation = 'false';
-  input.readOnly = true;
+  if (input.tagName === 'INPUT') input.readOnly = true;
+  if (input.tagName === 'SELECT') input.disabled = true;
   APP.fieldValues[`field_${idx}`] = input.value;
 
-  const btn = input.closest('tr').querySelector('button');
-  if (btn) btn.outerHTML = '<span style="color:var(--green)">✓</span>';
+  // Replace button with checkmark + "Mémoriser" option
+  const champ = APP.analysisResult.champs[idx];
+  const label = champ?.label_original || '';
+  const cat = champ?.categorie_identifiee || '';
+  const actionTd = input.closest('tr').querySelector('td:last-child');
+  if (actionTd) {
+    actionTd.innerHTML = `
+      <span style="color:var(--green)">✓</span>
+      <label style="display:flex;align-items:center;gap:4px;margin-top:4px;cursor:pointer;font-size:0.72rem;color:var(--text-secondary);">
+        <input type="checkbox" class="learn-rule-cb" data-field-idx="${idx}"
+               data-label="${escapeHtml(label)}" data-category="${escapeHtml(cat)}"
+               data-value="${escapeHtml(input.value)}">
+        Mémoriser
+      </label>
+    `;
+  }
 
   updateValidateButton();
 }

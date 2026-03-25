@@ -111,15 +111,28 @@ function initButtons() {
 
   document.getElementById('btnValidate').addEventListener('click', async () => {
     const newAliases = [];
+
+    // Learn rules from manually validated known fields (checkbox "Mémoriser")
+    document.querySelectorAll('.learn-rule-cb:checked').forEach(cb => {
+      const label = cb.dataset.label;
+      const value = cb.dataset.value;
+      const category = cb.dataset.category;
+      if (label && value) {
+        if (!APP.companyData.champs_appris) APP.companyData.champs_appris = {};
+        APP.companyData.champs_appris[label] = value;
+        newAliases.push(label);
+      }
+    });
+
+    // Learn from unknown fields
     document.querySelectorAll('.alias-cb:checked').forEach(cb => {
       const idx = cb.dataset.unknownIdx;
       const label = APP.analysisResult.champs_inconnus[idx]?.label_original;
       const catInput = document.querySelector(`.category-input[data-unknown-idx="${idx}"]`);
       const category = catInput?.value || label;
-
       if (label) {
-        if (!APP.companyData.alias_appris) APP.companyData.alias_appris = {};
-        APP.companyData.alias_appris[label] = { categorie: category };
+        if (!APP.companyData.champs_appris) APP.companyData.champs_appris = {};
+        APP.companyData.champs_appris[label] = category;
         newAliases.push(label);
       }
     });
@@ -130,8 +143,8 @@ function initButtons() {
       const category = catInput?.value;
       const value = APP.fieldValues[`unknown_${idx}`];
       if (category && value) {
-        if (!APP.companyData.valeurs_memorisees) APP.companyData.valeurs_memorisees = {};
-        APP.companyData.valeurs_memorisees[category] = value;
+        if (!APP.companyData.champs_appris) APP.companyData.champs_appris = {};
+        APP.companyData.champs_appris[category] = value;
       }
     });
 

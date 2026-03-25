@@ -468,6 +468,16 @@ tbody tr:hover { background: rgba(99, 102, 241, 0.04); }
   border-color: var(--green);
 }
 
+.field-select {
+  appearance: auto;
+  cursor: pointer;
+}
+
+.field-select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 /* ============================
    Learning Section
    ============================ */

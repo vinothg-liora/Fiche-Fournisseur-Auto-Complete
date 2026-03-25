@@ -21,11 +21,85 @@ async function processFile(file) {
 
 async function processExcel(arrayBuffer, fileName) {
   APP.fileType = 'xlsx';
-  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+  // Read with full style/format preservation
+  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellStyles: true, cellFormula: true, cellDates: true });
   APP.workbook = workbook;
 
+  // Extract data validation (dropdown) options per cell
+  APP.dataValidations = {};
+  workbook.SheetNames.forEach(name => {
+    const sheet = workbook.Sheets[name];
+    // XLSX.js stores data validations in sheet['!dataValidation']
+    const dvs = sheet['!dataValidation'] || [];
+    dvs.forEach(dv => {
+      if (dv.type === 'list' && dv.sqref && dv.formula1) {
+        // Parse options from comma-separated formula or range
+        let options = [];
+        const f = dv.formula1;
+        if (f.startsWith('"') && f.endsWith('"')) {
+          // Inline list: "Option1,Option2,Option3"
+          options = f.slice(1, -1).split(',').map(s => s.trim());
+        } else if (f.includes('!')) {
+          // Range reference — try to resolve from sheet
+          try {
+            const refSheet = f.split('!')[0].replace(/'/g, '');
+            const refRange = f.split('!')[1];
+            const ws = workbook.Sheets[refSheet] || sheet;
+            const range = XLSX.utils.decode_range(refRange);
+            for (let r = range.s.r; r <= range.e.r; r++) {
+              for (let c = range.s.c; c <= range.e.c; c++) {
+                const cell = ws[XLSX.utils.encode_cell({ r, c })];
+                if (cell && cell.v) options.push(String(cell.v));
+              }
+            }
+          } catch (e) {}
+        }
+        if (options.length > 0) {
+          // Parse sqref (can be "B25" or "B25:B30")
+          const refs = dv.sqref.split(/\s+/);
+          refs.forEach(ref => {
+            if (ref.includes(':')) {
+              try {
+                const range = XLSX.utils.decode_range(ref);
+                for (let r = range.s.r; r <= range.e.r; r++) {
+                  for (let c = range.s.c; c <= range.e.c; c++) {
+                    APP.dataValidations[XLSX.utils.encode_cell({ r, c })] = options;
+                  }
+                }
+              } catch (e) {}
+            } else {
+              APP.dataValidations[ref.toUpperCase()] = options;
+            }
+          });
+        }
+      }
+    });
+
+    // Also check for "Menus" sheet referenced in data validations
+    if (workbook.Sheets['Menus']) {
+      const menuSheet = workbook.Sheets['Menus'];
+      const menuRange = XLSX.utils.decode_range(menuSheet['!ref'] || 'A1');
+      // Each column in the Menus sheet is a dropdown list
+      for (let c = menuRange.s.c; c <= menuRange.e.c; c++) {
+        const headerCell = menuSheet[XLSX.utils.encode_cell({ r: 0, c })];
+        if (!headerCell) continue;
+        const options = [];
+        for (let r = 1; r <= menuRange.e.r; r++) {
+          const cell = menuSheet[XLSX.utils.encode_cell({ r, c })];
+          if (cell && cell.v) options.push(String(cell.v));
+        }
+        if (options.length > 0) {
+          // Store by header name for later matching
+          APP.dataValidations[`_menu_${String(headerCell.v).trim()}`] = options;
+        }
+      }
+    }
+  });
+
+  // Build text representation including dropdown info
   let textContent = '';
   workbook.SheetNames.forEach(name => {
+    if (name === 'Menus') return; // Skip menu reference sheet
     const sheet = workbook.Sheets[name];
     const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
     textContent += `=== Feuille: ${name} ===\n`;
@@ -34,7 +108,12 @@ async function processExcel(arrayBuffer, fileName) {
       for (let c = range.s.c; c <= range.e.c; c++) {
         const addr = XLSX.utils.encode_cell({ r, c });
         const cell = sheet[addr];
-        row.push(cell ? String(cell.v ?? '') : '');
+        let cellText = cell ? String(cell.v ?? '') : '';
+        // Add dropdown info
+        if (APP.dataValidations[addr]) {
+          cellText += ` [MENU DÉROULANT: ${APP.dataValidations[addr].join(', ')}]`;
+        }
+        row.push(cellText);
       }
       const rowStr = row.join(' | ');
       if (rowStr.trim()) {
@@ -119,26 +198,33 @@ function arrayBufferToBase64(buffer) {
 
 function generateCompletedExcel() {
   if (!APP.workbook || !APP.analysisResult) return;
-  const wb = XLSX.utils.book_new();
 
+  // Modify the ORIGINAL workbook in-place to preserve all formatting
   APP.workbook.SheetNames.forEach(name => {
-    const origSheet = APP.workbook.Sheets[name];
-    const newSheet = Object.assign({}, origSheet);
+    const sheet = APP.workbook.Sheets[name];
 
     APP.analysisResult.champs.forEach((champ, idx) => {
       const cellRef = champ.cellule_ou_position;
       if (cellRef && /^[A-Z]+\d+$/i.test(cellRef)) {
         const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
         if (value) {
-          newSheet[cellRef.toUpperCase()] = { t: 's', v: value };
+          const upperRef = cellRef.toUpperCase();
+          const existing = sheet[upperRef];
+          if (existing) {
+            // Preserve existing cell formatting, just update value
+            existing.v = value;
+            existing.t = 's';
+            delete existing.w; // Remove cached formatted text so XLSX recalculates
+          } else {
+            sheet[upperRef] = { t: 's', v: value };
+          }
         }
       }
     });
-
-    XLSX.utils.book_append_sheet(wb, newSheet, name);
   });
 
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  // Write the modified original workbook (preserves styles, merges, etc.)
+  const wbout = XLSX.write(APP.workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });
   downloadBlob(new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     APP.uploadedFileName.replace(/\.xlsx?$/i, '_complété.xlsx'));
 }
@@ -221,9 +307,11 @@ function downloadBlob(blob, filename) {
 
 function generateEmailRecap() {
   if (!APP.analysisResult) return '';
+  const fr = APP.companyData?.entites?.france;
+  const ct = fr?.contacts?.service_comptabilite_facturation;
   let text = `FICHE FOURNISSEUR - RÉCAPITULATIF\n`;
   text += `${'='.repeat(50)}\n\n`;
-  text += `Entreprise : ${APP.companyData?.entreprise?.raison_sociale || ''}\n`;
+  text += `Entreprise : ${fr?.nom_juridique || ''} (${fr?.nom_commercial || ''})\n`;
   text += `Date : ${new Date().toLocaleDateString('fr-FR')}\n`;
   text += `Fichier traité : ${APP.uploadedFileName}\n\n`;
   text += `${'\u2500'.repeat(50)}\n\n`;
@@ -245,9 +333,9 @@ function generateEmailRecap() {
   }
 
   text += `\n${'\u2500'.repeat(50)}\n`;
-  text += `Cordialement,\n${APP.companyData?.contacts?.contact_commercial?.prenom || ''} ${APP.companyData?.contacts?.contact_commercial?.nom || ''}`;
-  text += `\n${APP.companyData?.contacts?.contact_commercial?.email || ''}`;
-  text += `\n${APP.companyData?.contacts?.contact_commercial?.telephone || ''}`;
+  text += `Cordialement,\n${ct?.prenom || ''} ${ct?.nom || ''}`;
+  text += `\n${ct?.email || ''}`;
+  text += `\n${ct?.telephone || ''}`;
 
   return text;
 }
