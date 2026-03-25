@@ -139,44 +139,65 @@ function escapeHtml(str) {
 /* ===== Documents Tab ===== */
 function renderDocuments() {
   if (!APP.companyData) return;
-  const docs = APP.companyData.documents_officiels;
-  if (!docs) return;
+  const fr = APP.companyData.entites?.france;
+  if (!fr) return;
 
   const tbody = document.getElementById('documentsBody');
   tbody.innerHTML = '';
 
-  Object.entries(docs).forEach(([key, doc]) => {
-    const tr = document.createElement('tr');
-    const lastUpdate = new Date(doc.derniere_mise_a_jour);
-    let expiryDate;
-    let validityLabel;
+  // Build a unified docs list from the new structure
+  const docsList = [
+    { nom: 'Extrait Kbis', date: fr.documents_a_joindre?.kbis?.date_obtention, freq: 3 },
+    { nom: 'Attestation URSSAF', date: fr.documents_a_joindre?.attestation_vigilance_urssaf?.date_obtention, freq: 3 },
+    { nom: `Attestation ${fr.assurance?.assureur || 'Assurance'}`, date: '01/01/2026', freq: 12, expiry: '31/12/2026' },
+    { nom: 'Certificat Qualiopi', date: '30/12/2024', expiry: fr.documents_a_joindre?.attestation_qualiopi?.date_validite },
+  ];
 
-    if (doc.date_expiration) {
-      expiryDate = new Date(doc.date_expiration);
-      validityLabel = `Jusqu'au ${formatDate(doc.date_expiration)}`;
-    } else {
+  docsList.forEach(doc => {
+    const tr = document.createElement('tr');
+    let expiryDate, validityLabel;
+
+    // Parse dates (handle "Mars 2026" style or DD/MM/YYYY)
+    const parseDate = (str) => {
+      if (!str) return null;
+      // DD/MM/YYYY
+      const dmy = str.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      if (dmy) return new Date(dmy[3], dmy[2] - 1, dmy[1]);
+      // "Mars 2026" style
+      const months = { janvier:0, février:1, mars:2, avril:3, mai:4, juin:5, juillet:6, août:7, septembre:8, octobre:9, novembre:10, décembre:11 };
+      const myr = str.match(/(\w+)\s+(\d{4})/i);
+      if (myr && months[myr[1].toLowerCase()] !== undefined) return new Date(myr[2], months[myr[1].toLowerCase()], 1);
+      return new Date(str);
+    };
+
+    const lastUpdate = parseDate(doc.date);
+
+    if (doc.expiry) {
+      expiryDate = parseDate(doc.expiry);
+      validityLabel = `Jusqu'au ${doc.expiry}`;
+    } else if (lastUpdate && doc.freq) {
       expiryDate = new Date(lastUpdate);
-      expiryDate.setMonth(expiryDate.getMonth() + (doc.frequence_renouvellement_mois || 3));
-      validityLabel = `${doc.frequence_renouvellement_mois} mois`;
+      expiryDate.setMonth(expiryDate.getMonth() + doc.freq);
+      validityLabel = `${doc.freq} mois`;
+    } else {
+      expiryDate = new Date();
+      validityLabel = '—';
     }
 
     const now = new Date();
-    const daysLeft = daysBetween(now, expiryDate);
+    const daysLeft = expiryDate ? daysBetween(now, expiryDate) : 0;
     let statusIcon, statusClass;
     if (daysLeft < 0) {
-      statusIcon = '🔴';
-      statusClass = 'Expiré';
+      statusIcon = '🔴'; statusClass = 'Expiré';
     } else if (daysLeft <= 30) {
-      statusIcon = '🟠';
-      statusClass = 'Expire bientôt';
+      statusIcon = '🟠'; statusClass = 'Expire bientôt';
     } else {
-      statusIcon = '🟢';
-      statusClass = 'Valide';
+      statusIcon = '🟢'; statusClass = 'Valide';
     }
 
     tr.innerHTML = `
       <td>${escapeHtml(doc.nom)}</td>
-      <td>${formatDate(doc.derniere_mise_a_jour)}</td>
+      <td>${doc.date || '—'}</td>
       <td>${validityLabel}</td>
       <td><span class="status-dot">${statusIcon}</span> ${statusClass}${daysLeft >= 0 ? ` (${daysLeft}j)` : ''}</td>
     `;
@@ -233,34 +254,43 @@ function renderCompanyForm() {
   if (!APP.companyData) return;
   const container = document.getElementById('companyForm');
   const fields = [
-    ['Raison sociale', 'entreprise.raison_sociale'],
-    ['Forme juridique', 'entreprise.forme_juridique'],
-    ['Capital social', 'entreprise.capital_social'],
-    ['SIRET', 'entreprise.siret'],
-    ['SIREN', 'entreprise.siren'],
-    ['Code NAF/APE', 'entreprise.code_naf_ape'],
-    ['TVA Intracommunautaire', 'entreprise.tva_intracommunautaire'],
-    ['RCS', 'entreprise.rcs'],
-    ['NDA', 'entreprise.nda'],
-    ['UAI', 'entreprise.uai'],
-    ['Adresse', 'adresse.siege_social.adresse'],
-    ['Complément', 'adresse.siege_social.complement'],
-    ['Code postal', 'adresse.siege_social.code_postal'],
-    ['Ville', 'adresse.siege_social.ville'],
-    ['Pays', 'adresse.siege_social.pays'],
-    ['Nom dirigeant', 'contacts.dirigeant.nom'],
-    ['Prénom dirigeant', 'contacts.dirigeant.prenom'],
-    ['Email dirigeant', 'contacts.dirigeant.email'],
-    ['Tél dirigeant', 'contacts.dirigeant.telephone'],
-    ['Nom contact commercial', 'contacts.contact_commercial.nom'],
-    ['Prénom contact commercial', 'contacts.contact_commercial.prenom'],
-    ['Email contact commercial', 'contacts.contact_commercial.email'],
-    ['Tél contact commercial', 'contacts.contact_commercial.telephone'],
-    ['IBAN', 'coordonnees_bancaires.iban'],
-    ['BIC/SWIFT', 'coordonnees_bancaires.bic_swift'],
-    ['Banque', 'coordonnees_bancaires.banque'],
-    ['Effectif total', 'effectifs.effectif_total'],
-    ['Convention collective', 'effectifs.convention_collective'],
+    ['Nom commercial', 'entites.france.nom_commercial'],
+    ['Nom juridique', 'entites.france.nom_juridique'],
+    ['Forme juridique', 'entites.france.forme_juridique.type'],
+    ['Capital social', 'entites.france.forme_juridique.capital_social'],
+    ['Date de création', 'entites.france.forme_juridique.date_creation'],
+    ['SIRET siège', 'entites.france.identifiants.SIRET_siege'],
+    ['SIREN', 'entites.france.identifiants.SIREN'],
+    ['Code NAF/APE', 'entites.france.identifiants.code_NAF_APE'],
+    ['TVA Intracommunautaire', 'entites.france.identifiants.TVA_intracommunautaire'],
+    ['RCS', 'entites.france.identifiants.RCS'],
+    ['NDA', 'entites.france.identifiants.NDA'],
+    ['UAI', 'entites.france.identifiants.UAI'],
+    ['N° Qualiopi', 'entites.france.identifiants.numero_Qualiopi'],
+    ['Adresse', 'entites.france.siege_social.adresse_ligne1'],
+    ['Code postal', 'entites.france.siege_social.code_postal'],
+    ['Ville', 'entites.france.siege_social.ville'],
+    ['Pays', 'entites.france.siege_social.pays'],
+    ['Téléphone', 'entites.france.coordonnees.telephone'],
+    ['Email facturation', 'entites.france.coordonnees.email_facturation'],
+    ['Email contact', 'entites.france.coordonnees.email_contact'],
+    ['Site web', 'entites.france.coordonnees.site_web'],
+    ['Président', 'entites.france.dirigeants.president'],
+    ['Nom contact ADV', 'entites.france.contacts.service_comptabilite_facturation.nom'],
+    ['Prénom contact ADV', 'entites.france.contacts.service_comptabilite_facturation.prenom'],
+    ['Email contact ADV', 'entites.france.contacts.service_comptabilite_facturation.email'],
+    ['Tél contact ADV', 'entites.france.contacts.service_comptabilite_facturation.telephone'],
+    ['Nom contact commercial', 'entites.france.contacts.responsable_commercial.nom'],
+    ['Prénom contact commercial', 'entites.france.contacts.responsable_commercial.prenom'],
+    ['Email contact commercial', 'entites.france.contacts.responsable_commercial.email'],
+    ['IBAN', 'entites.france.bancaire.IBAN'],
+    ['BIC', 'entites.france.bancaire.BIC'],
+    ['Banque', 'entites.france.bancaire.banque'],
+    ['Domiciliation', 'entites.france.bancaire.domiciliation'],
+    ['CA N-1', 'entites.france.donnees_financieres.chiffre_affaires_N1'],
+    ['Effectif actuel', 'entites.france.donnees_financieres.effectif_actuel'],
+    ['Assureur', 'entites.france.assurance.assureur'],
+    ['N° police assurance', 'entites.france.assurance.numero_police'],
   ];
 
   let html = '<div class="company-form-grid">';
@@ -279,18 +309,22 @@ function renderCompanyForm() {
 
 function renderAliases() {
   const container = document.getElementById('aliasList');
-  const aliases = APP.companyData?.alias_appris || {};
+  const aliases = APP.companyData?.entites?.france?.aliases_champs_connus || {};
+  const appris = APP.companyData?.champs_appris || {};
+  const all = { ...aliases, ...appris };
 
-  if (Object.keys(aliases).length === 0) {
+  if (Object.keys(all).length === 0) {
     container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px;">Aucun alias appris pour le moment.</p>';
     return;
   }
 
   let html = '';
-  Object.entries(aliases).forEach(([label, info]) => {
+  Object.entries(all).forEach(([label, target]) => {
+    if (label.startsWith('_')) return;
+    const cat = typeof target === 'object' ? JSON.stringify(target) : target;
     html += `
       <div class="alias-item">
-        <span><span class="alias-label">${escapeHtml(label)}</span> → <span class="alias-category">${escapeHtml(info.categorie)}</span></span>
+        <span><span class="alias-label">${escapeHtml(label)}</span> → <span class="alias-category">${escapeHtml(cat)}</span></span>
         <button class="btn btn-danger btn-sm" onclick="deleteAlias('${escapeHtml(label)}')">Supprimer</button>
       </div>
     `;
@@ -301,7 +335,7 @@ function renderAliases() {
 function renderDocValidityForm() {
   if (!APP.companyData) return;
   const container = document.getElementById('docValidityForm');
-  const docs = APP.companyData.documents_officiels || {};
+  const docs = APP.companyData?.entites?.france?.documents_a_joindre || {};
 
   let html = '';
   Object.entries(docs).forEach(([key, doc]) => {
@@ -326,8 +360,13 @@ function renderDocValidityForm() {
 }
 
 function deleteAlias(label) {
-  if (!APP.companyData?.alias_appris) return;
-  delete APP.companyData.alias_appris[label];
+  // Try both locations
+  if (APP.companyData?.entites?.france?.aliases_champs_connus?.[label]) {
+    delete APP.companyData.entites.france.aliases_champs_connus[label];
+  }
+  if (APP.companyData?.champs_appris?.[label]) {
+    delete APP.companyData.champs_appris[label];
+  }
   renderAliases();
   showToast(`Alias "${label}" supprimé. Pensez à sauvegarder.`);
 }

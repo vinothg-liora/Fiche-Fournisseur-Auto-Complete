@@ -1,146 +1,141 @@
-/* ===== Default Company Data (embedded for file:// usage) ===== */
+/* ===== Default Company Data — DataScientest / Liora (embedded for file:// usage) ===== */
 const COMPANY_DATA = {
-  "entreprise": {
-    "raison_sociale": "Liora Formation SAS",
-    "forme_juridique": "SAS",
-    "capital_social": "50 000 €",
-    "date_creation": "2018-03-15",
-    "siret": "123 456 789 00012",
-    "siren": "123 456 789",
-    "code_naf_ape": "8559A",
-    "tva_intracommunautaire": "FR12 123456789",
-    "rcs": "RCS Paris B 123 456 789",
-    "nda": "11 75 12345 75",
-    "uai": "0753456A",
-    "certifications": {
-      "qualiopi": {
-        "numero": "QUA-2024-001234",
-        "date_obtention": "30/12/2024",
-        "date_expiration": "29/12/2027",
-        "categories": ["Actions de formation", "Bilans de compétences"]
-      }
+  "_notice": "Fichier de référence fournisseur — DataScientest / Liora.",
+  "entites": {
+    "france": {
+      "nom_commercial": "LIORA",
+      "nom_juridique": "DATASCIENTEST",
+      "nom_alternatif": "Liora",
+      "identifiants": {
+        "SIREN": "831450069",
+        "SIRET_siege": "83145006900024",
+        "SIRET_etablissements_secondaires": {
+          "Courbevoie_92400": "83145006900040",
+          "Puteaux_92800": "83145006900032",
+          "Paris_75016_Flandrin": "83145006900016",
+          "Paris_75016_Barcelone_2": "83145006900057"
+        },
+        "TVA_intracommunautaire": "FR69831450069",
+        "code_NAF_APE": "8559A",
+        "libelle_NAF": "Formation continue d'adultes",
+        "RCS": "831 450 069 RCS Paris",
+        "UAI": "0923015C",
+        "NDA": "11755665975",
+        "numero_Qualiopi": "B01084",
+        "DUNS": ""
+      },
+      "forme_juridique": {
+        "type": "Société par actions simplifiée (SAS)",
+        "code_forme_juridique": "5710",
+        "capital_social": "2 513 €",
+        "date_creation": "11/08/2017",
+        "exercice_social": "Du 1er juillet au 30 juin"
+      },
+      "siege_social": {
+        "adresse_ligne1": "2 Place de Barcelone",
+        "adresse_ligne2": "",
+        "code_postal": "75016",
+        "ville": "Paris",
+        "pays": "France",
+        "adresse_complete": "2 Place de Barcelone, 75016 Paris, France"
+      },
+      "coordonnees": {
+        "telephone": "09 80 80 79 49",
+        "email_facturation": "billing@liora.io",
+        "email_contact": "contact@liora.io",
+        "site_web": "liora.io"
+      },
+      "dirigeants": {
+        "president": "EDUCIN TOPCO",
+        "directeur_general": "EDUCIN TOPCO",
+        "representant_legal_nom": "EDUCIN TOPCO",
+        "representant_legal_prenom": "",
+        "representant_legal_qualite": "Président"
+      },
+      "bancaire": {
+        "banque": "BNP PARIBAS",
+        "domiciliation": "83 bd Sebastopol, 75002 Paris",
+        "IBAN": "FR76 3000 4028 3700 0113 0486 194",
+        "BIC": "BNPAFRPPXXX",
+        "RIB_titulaire": "DATASCIENTEST",
+        "RIB_banque": "30004",
+        "RIB_guichet": "02837",
+        "RIB_numero_compte": "00011304861",
+        "RIB_cle": "94"
+      },
+      "donnees_financieres": {
+        "chiffre_affaires_N1": "21 029 000 €",
+        "chiffre_affaires_N1_libelle": "Exercice clos au 30/06/2024",
+        "chiffre_affaires_N": "28 048 000 €",
+        "chiffre_affaires_N_libelle": "Exercice clos au 30/06/2025",
+        "effectif_actuel": "120"
+      },
+      "contacts": {
+        "service_comptabilite_facturation": {
+          "nom": "NGAN",
+          "prenom": "Cédric",
+          "civilite": "M.",
+          "email": "billing@liora.io",
+          "telephone": "07 55 52 08 49",
+          "intitule_poste": "Responsable ADV"
+        },
+        "responsable_commercial": {
+          "nom": "LOTH",
+          "prenom": "Nathan",
+          "civilite": "M.",
+          "email": "nathan@liora.io",
+          "telephone": "",
+          "intitule_poste": "Directeur B2B"
+        }
+      },
+      "documents_a_joindre": {
+        "kbis": {
+          "description": "Extrait Kbis de moins de 6 mois",
+          "date_obtention": "Mars 2026",
+          "frequence_renouvellement_mois": 3
+        },
+        "attestation_vigilance_urssaf": {
+          "description": "Attestation de vigilance URSSAF",
+          "date_obtention": "Mars 2026",
+          "frequence_renouvellement_mois": 3
+        },
+        "attestation_qualiopi": {
+          "description": "Certificat Qualiopi",
+          "date_validite": "29/12/2027"
+        }
+      },
+      "assurance": {
+        "assureur": "AXA",
+        "numero_police": "6055097904",
+        "attestation_validite": "Valide du 01/01/2026 au 31/12/2026"
+      },
+      "certifications": {
+        "Qualiopi": "Oui",
+        "date_validite_Qualiopi": "Valide du 30/12/2024 au 29/12/2027",
+        "certificateur_Qualiopi": "ICPF",
+        "numero_Qualiopi": "B01084"
+      },
+      "aliases_champs_connus": {}
     }
   },
-  "adresse": {
-    "siege_social": {
-      "adresse": "15 Rue de la Formation",
-      "complement": "Bâtiment A, 3ème étage",
-      "code_postal": "75008",
-      "ville": "Paris",
-      "pays": "France"
-    },
-    "adresse_facturation": {
-      "identique_siege": true,
-      "adresse": "",
-      "complement": "",
-      "code_postal": "",
-      "ville": "",
-      "pays": ""
-    }
-  },
-  "contacts": {
-    "dirigeant": {
-      "civilite": "M.",
-      "nom": "Dupont",
-      "prenom": "Jean",
-      "fonction": "Directeur Général",
-      "email": "j.dupont@liora-formation.fr",
-      "telephone": "+33 1 23 45 67 89"
-    },
-    "contact_commercial": {
-      "civilite": "Mme",
-      "nom": "Martin",
-      "prenom": "Sophie",
-      "fonction": "Responsable ADV",
-      "email": "s.martin@liora-formation.fr",
-      "telephone": "+33 1 23 45 67 90"
-    },
-    "contact_comptabilite": {
-      "civilite": "M.",
-      "nom": "Bernard",
-      "prenom": "Pierre",
-      "fonction": "Responsable Comptabilité",
-      "email": "p.bernard@liora-formation.fr",
-      "telephone": "+33 1 23 45 67 91"
-    }
-  },
-  "coordonnees_bancaires": {
-    "banque": "BNP Paribas",
-    "iban": "FR76 1234 5678 9012 3456 7890 123",
-    "bic_swift": "BNPAFRPPXXX",
-    "titulaire_compte": "Liora Formation SAS"
-  },
-  "informations_fiscales": {
-    "regime_tva": "Normal",
-    "assujetti_tva": true,
-    "exoneration_tva_formation": true,
-    "reference_exoneration": "Article 261-4-4°a du CGI"
-  },
-  "assurances": {
-    "responsabilite_civile": {
-      "assureur": "AXA France",
-      "numero_police": "POL-2024-789456",
-      "date_debut": "01/01/2026",
-      "date_fin": "31/12/2026",
-      "montant_couverture": "5 000 000 €"
-    },
-    "responsabilite_civile_professionnelle": {
-      "assureur": "AXA France",
-      "numero_police": "POL-2024-789457",
-      "date_debut": "01/01/2026",
-      "date_fin": "31/12/2026",
-      "montant_couverture": "2 000 000 €"
-    }
-  },
-  "effectifs": {
-    "effectif_total": 45,
-    "effectif_formateurs": 30,
-    "convention_collective": "IDCC 1516 - Organismes de formation"
-  },
-  "references_clients": [
-    "SNCF",
-    "EDF",
-    "Orange",
-    "BNP Paribas",
-    "Société Générale"
-  ],
-  "documents_officiels": {
-    "kbis": {
-      "nom": "Extrait Kbis",
-      "derniere_mise_a_jour": "2026-03-01",
-      "frequence_renouvellement_mois": 3
-    },
-    "attestation_urssaf": {
-      "nom": "Attestation URSSAF",
-      "derniere_mise_a_jour": "2026-03-01",
-      "frequence_renouvellement_mois": 3
-    },
-    "attestation_assurance": {
-      "nom": "Attestation AXA",
-      "derniere_mise_a_jour": "2026-01-15",
-      "frequence_renouvellement_mois": 12
-    },
-    "certificat_qualiopi": {
-      "nom": "Certificat Qualiopi",
-      "derniere_mise_a_jour": "2024-12-30",
-      "date_expiration": "2027-12-29"
-    }
-  },
-  "alias_appris": {},
-  "valeurs_memorisees": {},
+  "champs_appris": {},
   "historique": []
 };
 
 /* ===== Data Layer ===== */
+
+// Shortcut to France entity
+function getFR() {
+  return APP.companyData?.entites?.france;
+}
+
 async function loadCompanyData() {
-  // Use embedded data directly (works with file:// protocol)
   APP.companyData = JSON.parse(JSON.stringify(COMPANY_DATA));
   document.getElementById('connectionStatus').textContent = '🟢 Connecté';
   return true;
 }
 
 async function saveCompanyData() {
-  // For local file:// usage, we download the updated JSON.
   const blob = new Blob([JSON.stringify(APP.companyData, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -152,115 +147,174 @@ async function saveCompanyData() {
 }
 
 function getCompanyValue(category) {
-  if (!APP.companyData) return '';
+  const fr = getFR();
+  if (!fr) return '';
   const cat = category.toLowerCase().trim();
-  const data = APP.companyData;
 
   // Check learned aliases first
-  if (data.alias_appris) {
-    for (const [alias, info] of Object.entries(data.alias_appris)) {
-      if (cat.includes(alias.toLowerCase())) {
-        if (data.valeurs_memorisees && data.valeurs_memorisees[info.categorie]) {
-          return data.valeurs_memorisees[info.categorie];
-        }
-      }
+  const aliases = fr.aliases_champs_connus || {};
+  for (const [alias, target] of Object.entries(aliases)) {
+    if (cat.includes(alias.toLowerCase())) {
+      const resolved = resolveAlias(target, fr);
+      if (resolved) return resolved;
     }
   }
 
-  // Direct mappings
+  // Check champs_appris
+  const appris = APP.companyData?.champs_appris || {};
+  for (const [key, val] of Object.entries(appris)) {
+    if (cat.includes(key.toLowerCase()) && val && !val.startsWith('[')) {
+      return val;
+    }
+  }
+
+  // Direct mappings — all known variants
+  const id = fr.identifiants || {};
+  const fj = fr.forme_juridique || {};
+  const siege = fr.siege_social || {};
+  const coord = fr.coordonnees || {};
+  const dir = fr.dirigeants || {};
+  const bank = fr.bancaire || {};
+  const fin = fr.donnees_financieres || {};
+  const ctFactu = fr.contacts?.service_comptabilite_facturation || {};
+  const ctComm = fr.contacts?.responsable_commercial || {};
+  const assur = fr.assurance || {};
+  const cert = fr.certifications || {};
+
   const mappings = {
-    'raison_sociale': data.entreprise?.raison_sociale,
-    'raison sociale': data.entreprise?.raison_sociale,
-    'company name': data.entreprise?.raison_sociale,
-    'nom entreprise': data.entreprise?.raison_sociale,
-    'denomination': data.entreprise?.raison_sociale,
-    'forme_juridique': data.entreprise?.forme_juridique,
-    'forme juridique': data.entreprise?.forme_juridique,
-    'legal form': data.entreprise?.forme_juridique,
-    'capital': data.entreprise?.capital_social,
-    'capital social': data.entreprise?.capital_social,
-    'siret': data.entreprise?.siret,
-    'n° siret': data.entreprise?.siret,
-    'numero siret': data.entreprise?.siret,
-    'siret fournisseur': data.entreprise?.siret,
-    'siren': data.entreprise?.siren,
-    'n° siren': data.entreprise?.siren,
-    'code naf': data.entreprise?.code_naf_ape,
-    'code ape': data.entreprise?.code_naf_ape,
-    'naf': data.entreprise?.code_naf_ape,
-    'ape': data.entreprise?.code_naf_ape,
-    'tva intracommunautaire': data.entreprise?.tva_intracommunautaire,
-    'tva intracom': data.entreprise?.tva_intracommunautaire,
-    'n° tva': data.entreprise?.tva_intracommunautaire,
-    'vat number': data.entreprise?.tva_intracommunautaire,
-    'tax id': data.entreprise?.tva_intracommunautaire,
-    'numero identification fiscale': data.entreprise?.tva_intracommunautaire,
-    'steuernummer': data.entreprise?.tva_intracommunautaire,
-    'fiscal number': data.entreprise?.tva_intracommunautaire,
-    'rcs': data.entreprise?.rcs,
-    'nda': data.entreprise?.nda,
-    'numero declaration activite': data.entreprise?.nda,
-    'uai': data.entreprise?.uai,
-    'qualiopi': data.entreprise?.certifications?.qualiopi?.numero,
-    'certificat qualiopi': data.entreprise?.certifications?.qualiopi?.numero,
-    'adresse': data.adresse?.siege_social?.adresse,
-    'adresse siege': data.adresse?.siege_social?.adresse,
-    'adresse siege social': data.adresse?.siege_social?.adresse,
-    'address': data.adresse?.siege_social?.adresse,
-    'rue': data.adresse?.siege_social?.adresse,
-    'street': data.adresse?.siege_social?.adresse,
-    'complement adresse': data.adresse?.siege_social?.complement,
-    'code postal': data.adresse?.siege_social?.code_postal,
-    'zip code': data.adresse?.siege_social?.code_postal,
-    'postal code': data.adresse?.siege_social?.code_postal,
-    'plz': data.adresse?.siege_social?.code_postal,
-    'ville': data.adresse?.siege_social?.ville,
-    'city': data.adresse?.siege_social?.ville,
-    'ort': data.adresse?.siege_social?.ville,
-    'pays': data.adresse?.siege_social?.pays,
-    'country': data.adresse?.siege_social?.pays,
-    'land': data.adresse?.siege_social?.pays,
-    'dirigeant nom': data.contacts?.dirigeant ? `${data.contacts.dirigeant.prenom} ${data.contacts.dirigeant.nom}` : '',
-    'representant legal': data.contacts?.dirigeant ? `${data.contacts.dirigeant.prenom} ${data.contacts.dirigeant.nom}` : '',
-    'nom dirigeant': data.contacts?.dirigeant?.nom,
-    'prenom dirigeant': data.contacts?.dirigeant?.prenom,
-    'fonction dirigeant': data.contacts?.dirigeant?.fonction,
-    'email dirigeant': data.contacts?.dirigeant?.email,
-    'telephone dirigeant': data.contacts?.dirigeant?.telephone,
-    'contact commercial': data.contacts?.contact_commercial ? `${data.contacts.contact_commercial.prenom} ${data.contacts.contact_commercial.nom}` : '',
-    'email commercial': data.contacts?.contact_commercial?.email,
-    'email contact': data.contacts?.contact_commercial?.email,
-    'telephone commercial': data.contacts?.contact_commercial?.telephone,
-    'telephone contact': data.contacts?.contact_commercial?.telephone,
-    'email': data.contacts?.contact_commercial?.email,
-    'telephone': data.contacts?.contact_commercial?.telephone,
-    'phone': data.contacts?.contact_commercial?.telephone,
-    'tel': data.contacts?.contact_commercial?.telephone,
-    'contact comptabilite': data.contacts?.contact_comptabilite ? `${data.contacts.contact_comptabilite.prenom} ${data.contacts.contact_comptabilite.nom}` : '',
-    'email comptabilite': data.contacts?.contact_comptabilite?.email,
-    'banque': data.coordonnees_bancaires?.banque,
-    'iban': data.coordonnees_bancaires?.iban,
-    'bic': data.coordonnees_bancaires?.bic_swift,
-    'bic swift': data.coordonnees_bancaires?.bic_swift,
-    'swift': data.coordonnees_bancaires?.bic_swift,
-    'titulaire compte': data.coordonnees_bancaires?.titulaire_compte,
-    'regime tva': data.informations_fiscales?.regime_tva,
-    'assureur': data.assurances?.responsabilite_civile?.assureur,
-    'numero police assurance': data.assurances?.responsabilite_civile?.numero_police,
-    'rc pro': data.assurances?.responsabilite_civile_professionnelle?.assureur,
-    'effectif': String(data.effectifs?.effectif_total || ''),
-    'effectif total': String(data.effectifs?.effectif_total || ''),
-    'convention collective': data.effectifs?.convention_collective,
-    'date creation': data.entreprise?.date_creation,
+    // Identité
+    'raison sociale': fr.nom_juridique,
+    'raison_sociale': fr.nom_juridique,
+    'company name': fr.nom_juridique,
+    'nom entreprise': fr.nom_juridique,
+    'denomination': fr.nom_juridique,
+    'nom commercial': fr.nom_commercial,
+    'nom juridique': fr.nom_juridique,
+    // Forme juridique
+    'forme juridique': fj.type,
+    'forme_juridique': fj.type,
+    'legal form': fj.type,
+    'capital': fj.capital_social,
+    'capital social': fj.capital_social,
+    'date creation': fj.date_creation,
+    'date de creation': fj.date_creation,
+    // Identifiants
+    'siret': id.SIRET_siege,
+    'n° siret': id.SIRET_siege,
+    'numero siret': id.SIRET_siege,
+    'siret fournisseur': id.SIRET_siege,
+    'identification fiscale': id.SIRET_siege,
+    'siren': id.SIREN,
+    'n° siren': id.SIREN,
+    'code naf': id.code_NAF_APE,
+    'code ape': id.code_NAF_APE,
+    'naf': id.code_NAF_APE,
+    'ape': id.code_NAF_APE,
+    'tva intracommunautaire': id.TVA_intracommunautaire,
+    'tva intracom': id.TVA_intracommunautaire,
+    'n° tva': id.TVA_intracommunautaire,
+    'numero de tva': id.TVA_intracommunautaire,
+    'vat number': id.TVA_intracommunautaire,
+    'tax id': id.TVA_intracommunautaire,
+    'numero identification fiscale': id.TVA_intracommunautaire,
+    'steuernummer': id.TVA_intracommunautaire,
+    'fiscal number': id.TVA_intracommunautaire,
+    'rcs': id.RCS,
+    'nda': id.NDA,
+    'numero declaration activite': id.NDA,
+    'n° declaration': id.NDA,
+    'uai': id.UAI,
+    'n° uai': id.UAI,
+    'code uai': id.UAI,
+    'qualiopi': cert.numero_Qualiopi,
+    'numero qualiopi': cert.numero_Qualiopi,
+    'certificat qualiopi': cert.numero_Qualiopi,
+    'duns': id.DUNS,
+    // Adresse
+    'adresse': siege.adresse_complete,
+    'adresse siege': siege.adresse_complete,
+    'adresse siege social': siege.adresse_complete,
+    'adresse facturation': siege.adresse_complete,
+    'address': siege.adresse_complete,
+    'rue': siege.adresse_ligne1,
+    'street': siege.adresse_ligne1,
+    'code postal': siege.code_postal,
+    'zip code': siege.code_postal,
+    'postal code': siege.code_postal,
+    'plz': siege.code_postal,
+    'ville': siege.ville,
+    'city': siege.ville,
+    'ort': siege.ville,
+    'pays': siege.pays,
+    'country': siege.pays,
+    'land': siege.pays,
+    // Coordonnées
+    'telephone': coord.telephone,
+    'phone': coord.telephone,
+    'tel': coord.telephone,
+    'email': coord.email_contact,
+    'email contact': coord.email_contact,
+    'email facturation': coord.email_facturation,
+    'site web': coord.site_web,
+    'website': coord.site_web,
+    // Dirigeants
+    'representant legal': dir.representant_legal_nom,
+    'dirigeant': dir.president,
+    'president': dir.president,
+    'directeur general': dir.directeur_general,
+    // Contact facturation / ADV
+    'contact facturation': `${ctFactu.prenom} ${ctFactu.nom}`,
+    'service comptabilite': `${ctFactu.prenom} ${ctFactu.nom}`,
+    'responsable facturation': `${ctFactu.prenom} ${ctFactu.nom}`,
+    'nom contact facturation': ctFactu.nom,
+    'prenom contact facturation': ctFactu.prenom,
+    'email comptabilite': ctFactu.email,
+    'telephone facturation': ctFactu.telephone,
+    // Contact commercial
+    'responsable commercial': `${ctComm.prenom} ${ctComm.nom}`,
+    'contact commercial': `${ctComm.prenom} ${ctComm.nom}`,
+    'email commercial': ctComm.email,
+    'telephone commercial': ctComm.telephone,
+    // Banque
+    'banque': bank.banque,
+    'iban': bank.IBAN,
+    'bic': bank.BIC,
+    'bic swift': bank.BIC,
+    'swift': bank.BIC,
+    'domiciliation bancaire': bank.domiciliation,
+    'titulaire compte': bank.RIB_titulaire,
+    // Finance
+    'chiffre affaires': fin.chiffre_affaires_N1,
+    'ca n-1': fin.chiffre_affaires_N1,
+    'ca n': fin.chiffre_affaires_N,
+    'effectif': fin.effectif_actuel,
+    'effectif total': fin.effectif_actuel,
+    'nombre de salaries': fin.effectif_actuel,
+    // Assurance
+    'assureur': assur.assureur,
+    'numero police assurance': assur.numero_police,
+    'numero police': assur.numero_police,
   };
 
   // Fuzzy match
   for (const [key, value] of Object.entries(mappings)) {
-    if (cat.includes(key) || key.includes(cat)) {
-      return value || '';
+    if (value && (cat.includes(key) || key.includes(cat))) {
+      return value;
     }
   }
   return '';
+}
+
+function resolveAlias(target, fr) {
+  // Simple dot-path resolution on the france entity
+  if (!target || typeof target !== 'string') return '';
+  const parts = target.split('.');
+  let obj = fr;
+  for (const p of parts) {
+    if (!obj || typeof obj !== 'object') return '';
+    obj = obj[p];
+  }
+  return (typeof obj === 'string' && !obj.startsWith('[')) ? obj : '';
 }
 
 function addToHistory(entry) {
