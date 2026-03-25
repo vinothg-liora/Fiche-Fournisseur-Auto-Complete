@@ -17,7 +17,9 @@ function renderVerificationTable(result) {
 
     const tr = document.createElement('tr');
     const confClass = `confidence-${champ.confiance}`;
-    const needsValidation = champ.confiance === 'basse' || champ.confiance === 'moyenne';
+    // Only auto-validate if we have a real value from company_data (not an instruction from Claude)
+    const hasRealValue = knownValue && knownValue.length > 0;
+    const needsValidation = !hasRealValue;
 
     tr.innerHTML = `
       <td title="${escapeHtml(champ.justification || '')}">${escapeHtml(champ.label_original)}</td>
@@ -30,10 +32,10 @@ function renderVerificationTable(result) {
                value="${escapeHtml(prefilledValue)}"
                data-field-idx="${idx}"
                data-needs-validation="${needsValidation}"
-               ${!needsValidation && prefilledValue ? 'readonly' : ''}>
+               ${!needsValidation ? 'readonly' : ''}>
       </td>
       <td>
-        ${needsValidation || !prefilledValue ?
+        ${needsValidation ?
           `<button class="btn btn-sm btn-secondary" onclick="validateField(${idx})">✓ Valider</button>` :
           `<span style="color:var(--green)">✓</span>`
         }
@@ -120,9 +122,10 @@ function validateField(idx) {
 }
 
 function updateValidateButton() {
-  const allInputs = document.querySelectorAll('.field-input[data-needs-validation="true"]');
+  // Only check known fields (data-field-idx), not unknown fields
+  const knownInputs = document.querySelectorAll('.field-input[data-field-idx][data-needs-validation="true"]');
   let allValidated = true;
-  allInputs.forEach(input => {
+  knownInputs.forEach(input => {
     if (input.dataset.needsValidation === 'true' && !input.classList.contains('validated')) {
       allValidated = false;
     }
