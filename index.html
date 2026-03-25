@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fiche Fournisseur Auto-Complete</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <h1><span>Fiche Fournisseur</span> Auto-Complete</h1>
+  </div>
+  <div style="color:var(--text-muted);font-size:.85rem;" id="connectionStatus"></div>
+</header>
+
+<!-- Tabs -->
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="accueil">Accueil</button>
+  <button class="tab-btn" data-tab="documents">Documents officiels</button>
+  <button class="tab-btn" data-tab="historique">Historique</button>
+  <button class="tab-btn" data-tab="parametres">Paramètres</button>
+</nav>
+
+<!-- Main Content -->
+<main>
+
+  <!-- ===== TAB: Accueil ===== -->
+  <section class="tab-content active" id="tab-accueil">
+    <!-- Step 1: Upload -->
+    <div id="uploadSection">
+      <div class="drop-zone" id="dropZone">
+        <div class="icon">📄</div>
+        <h2>Glissez-déposez votre fichier client ici</h2>
+        <p>Formats acceptés : Excel (.xlsx), PDF formulaire, PDF scanné/image</p>
+        <input type="file" id="fileInput" accept=".xlsx,.pdf,.png,.jpg,.jpeg,.tiff" hidden>
+        <div class="file-info" id="fileInfo"></div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btnComplete" disabled>
+          Compléter le document
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Verification -->
+    <div class="verification-section" id="verificationSection">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="color:var(--text-white);">Vérification et complétion</h2>
+        <button class="btn btn-secondary btn-sm" id="btnBackToUpload">← Nouveau fichier</button>
+      </div>
+
+      <div class="structure-info" id="structureInfo">
+        <h3>Structure détectée</h3>
+        <p id="structureDesc"></p>
+        <p style="margin-top:4px;"><strong>Langue :</strong> <span id="langueDoc"></span></p>
+      </div>
+
+      <!-- Known fields table -->
+      <table id="fieldsTable">
+        <thead>
+          <tr>
+            <th>Champ détecté</th>
+            <th>Position</th>
+            <th>Catégorie identifiée</th>
+            <th>Confiance</th>
+            <th>Valeur à insérer</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="fieldsBody"></tbody>
+      </table>
+
+      <!-- Unknown fields -->
+      <div class="unknown-fields-section" id="unknownFieldsSection" style="display:none;">
+        <h3>Champs non reconnus</h3>
+        <table id="unknownFieldsTable">
+          <thead>
+            <tr>
+              <th>Label original</th>
+              <th>Position</th>
+              <th>Description</th>
+              <th>Valeur</th>
+              <th>Apprentissage</th>
+            </tr>
+          </thead>
+          <tbody id="unknownFieldsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="actions" style="margin-top:24px;">
+        <button class="btn btn-primary" id="btnValidate" disabled>
+          Valider et générer
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 3: Result -->
+    <div class="verification-section" id="resultSection">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 style="color:var(--text-white);">Document complété</h2>
+        <button class="btn btn-secondary btn-sm" id="btnNewFile">Nouveau fichier</button>
+      </div>
+      <div class="structure-info">
+        <h3>Génération terminée</h3>
+        <p id="resultSummary"></p>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btnDownload">Télécharger le document complété</button>
+        <button class="btn btn-secondary" id="btnEmailRecap">Récapitulatif email</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== TAB: Documents officiels ===== -->
+  <section class="tab-content" id="tab-documents">
+    <div class="doc-header">
+      <h2 style="color:var(--text-white);">Documents officiels</h2>
+      <button class="btn btn-primary" id="btnSharePoint">📁 Accéder aux documents sur SharePoint</button>
+    </div>
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th>Document</th>
+          <th>Dernière mise à jour</th>
+          <th>Validité</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody id="documentsBody"></tbody>
+    </table>
+  </section>
+
+  <!-- ===== TAB: Historique ===== -->
+  <section class="tab-content" id="tab-historique">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2 style="color:var(--text-white);">Historique des traitements</h2>
+      <button class="btn btn-secondary btn-sm" id="btnExportHistory">Exporter en Excel</button>
+    </div>
+    <div id="historyContent"></div>
+  </section>
+
+  <!-- ===== TAB: Paramètres ===== -->
+  <section class="tab-content" id="tab-parametres">
+    <h2 style="color:var(--text-white);margin-bottom:20px;">Paramètres</h2>
+    <div class="settings-grid">
+
+      <!-- API Key -->
+      <div class="settings-card">
+        <h3>🔑 Clé API Anthropic</h3>
+        <div class="form-group">
+          <label>Clé API</label>
+          <div class="input-with-toggle">
+            <input type="password" id="apiKeyInput" placeholder="sk-ant-api...">
+            <button class="toggle-visibility" onclick="toggleVisibility('apiKeyInput')">👁</button>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btnSaveApiKey">Sauvegarder</button>
+      </div>
+
+      <!-- SharePoint URL -->
+      <div class="settings-card">
+        <h3>📁 URL SharePoint</h3>
+        <div class="form-group">
+          <label>URL du dossier SharePoint</label>
+          <input type="url" id="sharePointUrl" placeholder="https://votre-organisation.sharepoint.com/...">
+        </div>
+        <button class="btn btn-primary btn-sm" id="btnSaveSharePoint">Sauvegarder</button>
+      </div>
+
+      <!-- Network Path -->
+      <div class="settings-card">
+        <h3>🌐 Dossier réseau partagé</h3>
+        <div class="form-group">
+          <label>Chemin vers le fichier company_data.json</label>
+          <input type="text" id="networkPath" placeholder="company_data.json">
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" id="btnSaveNetworkPath">Sauvegarder</button>
+          <button class="btn btn-secondary btn-sm" id="btnTestConnection">Tester la connexion</button>
+        </div>
+      </div>
+
+      <!-- Company Info -->
+      <div class="settings-card">
+        <h3>🏢 Informations de l'entreprise</h3>
+        <div id="companyForm"></div>
+        <button class="btn btn-primary btn-sm" id="btnSaveCompany" style="margin-top:12px;">Sauvegarder dans company_data.json</button>
+      </div>
+
+      <!-- Aliases -->
+      <div class="settings-card">
+        <h3>🏷️ Alias appris</h3>
+        <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px;">
+          Libellés mémorisés pour la reconnaissance automatique
+        </p>
+        <div class="alias-list" id="aliasList">
+          <p style="color:var(--text-muted);text-align:center;padding:20px;">Aucun alias appris pour le moment.</p>
+        </div>
+      </div>
+
+      <!-- Document Validity -->
+      <div class="settings-card">
+        <h3>📋 Dates de validité des documents</h3>
+        <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px;">
+          Kbis et URSSAF : renouvellement tous les 3 mois • Assurance : annuelle
+        </p>
+        <div id="docValidityForm"></div>
+        <button class="btn btn-primary btn-sm" id="btnSaveDocDates" style="margin-top:12px;">Sauvegarder</button>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <p id="loadingText">Analyse du document en cours...</p>
+</div>
+
+<!-- Email Recap Modal -->
+<div class="modal-overlay" id="emailModal">
+  <div class="modal">
+    <h2>Récapitulatif email</h2>
+    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px;">
+      Copiez ce texte pour l'envoyer par email au client.
+    </p>
+    <div class="email-recap" id="emailRecapContent"></div>
+    <div class="actions">
+      <button class="btn btn-primary btn-sm" id="btnCopyEmail">Copier dans le presse-papiers</button>
+      <button class="btn btn-secondary btn-sm" id="btnCloseEmailModal">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+</script>
+<script src="app-utils.js"></script>
+<script src="app-data.js"></script>
+<script src="app-api.js"></script>
+<script src="app-file.js"></script>
+<script src="app-ui.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
