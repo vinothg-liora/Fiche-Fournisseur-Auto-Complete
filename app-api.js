@@ -88,38 +88,62 @@ async function analyzeWithClaude(fileContentBase64, fileName, fileType, textCont
 
   messages.push({ role: 'user', content: userContent });
 
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8000,
-        system: SYSTEM_PROMPT,
-        messages: messages
-      })
-    });
+  const maxRetries = 3;
+  const retryDelays = [3000, 8000, 15000]; // 3s, 8s, 15s
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error?.message || `API error ${response.status}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 8000,
+          system: SYSTEM_PROMPT,
+          messages: messages
+        })
+      });
+
+      // Retry on overload (529) or rate limit (429)
+      if ((response.status === 529 || response.status === 429) && attempt < maxRetries) {
+        const delay = retryDelays[attempt];
+        showLoading(`API surchargée — nouvelle tentative dans ${delay / 1000}s (${attempt + 1}/${maxRetries})...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        const msg = err.error?.message || `API error ${response.status}`;
+        if (response.status === 529) throw new Error('API Claude temporairement surchargée. Réessayez dans quelques minutes.');
+        if (response.status === 429) throw new Error('Limite de requêtes atteinte. Réessayez dans quelques minutes.');
+        if (response.status === 401) throw new Error('Clé API invalide. Vérifiez dans Paramètres.');
+        throw new Error(msg);
+      }
+
+      const result = await response.json();
+      const text = result.content[0].text;
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('Réponse API invalide - pas de JSON trouvé');
+
+      return JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      if (attempt < maxRetries && (e.message.includes('fetch') || e.message.includes('network'))) {
+        const delay = retryDelays[attempt];
+        showLoading(`Erreur réseau — nouvelle tentative dans ${delay / 1000}s...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      console.error('Erreur API Claude:', e);
+      showToast('Erreur API : ' + e.message, 'error');
+      return null;
     }
-
-    const result = await response.json();
-    const text = result.content[0].text;
-
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Réponse API invalide - pas de JSON trouvé');
-
-    return JSON.parse(jsonMatch[0]);
-  } catch (e) {
-    console.error('Erreur API Claude:', e);
-    showToast('Erreur API : ' + e.message, 'error');
-    return null;
   }
+  return null;
 }
