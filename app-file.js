@@ -2,7 +2,8 @@
 
 async function processFile(file) {
   const arrayBuffer = await file.arrayBuffer();
-  APP.fileContent = arrayBuffer;
+  // Store a Uint8Array copy — ArrayBuffer can be detached by XLSX.read()
+  APP.fileContent = new Uint8Array(arrayBuffer);
   APP.uploadedFileName = file.name;
   const ext = file.name.split('.').pop().toLowerCase();
 
@@ -21,8 +22,8 @@ async function processFile(file) {
 
 async function processExcel(arrayBuffer, fileName) {
   APP.fileType = 'xlsx';
-  // Read with full style/format preservation
-  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellStyles: true, cellFormula: true, cellDates: true });
+  // Read with full style/format preservation — use a copy so original stays intact
+  const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true, cellFormula: true, cellDates: true });
   APP.workbook = workbook;
 
   // Extract data validation (dropdown) options per cell
