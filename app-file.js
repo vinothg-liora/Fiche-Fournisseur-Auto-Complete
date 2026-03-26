@@ -243,7 +243,7 @@ async function generateCompletedExcel() {
           if (!updatesBySheet[path]) updatesBySheet[path] = {};
           updatesBySheet[path][cellRef] = value;
         }
-        continue;
+        return;
       }
 
       if (!updatesBySheet[targetPath]) updatesBySheet[targetPath] = {};
