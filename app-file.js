@@ -271,9 +271,16 @@ async function generateCompletedExcel() {
       if (!file) { console.warn('Sheet file not found:', xmlPath); continue; }
 
       const sheetXml = await file.async('string');
+
+      // Debug: show XML structure around row tags
+      console.log('XML snippet (first 500 chars of sheetData):', sheetXml.substring(sheetXml.indexOf('sheetData') - 1, sheetXml.indexOf('sheetData') + 500));
+
       const updatedXml = updateSheetXmlDOM(sheetXml, updates);
 
       if (updatedXml) {
+        // Verify changes were made
+        const sampleRef = Object.keys(updates)[0];
+        console.log('Verification - looking for', sampleRef, 'in output:', updatedXml.includes(sampleRef));
         zip.file(xmlPath, updatedXml);
       }
     }
@@ -346,55 +353,65 @@ async function buildSheetMap(zip) {
   return map;
 }
 
-// Pure string manipulation — no DOMParser, no XMLSerializer, no namespace issues
+// Pure string manipulation — supports optional namespace prefixes (e.g. <x:c>, <x:row>)
 function updateSheetXmlDOM(sheetXml, updates) {
   try {
     let xml = sheetXml;
     let changeCount = 0;
 
+    // Detect namespace prefix used for cells/rows (e.g. "x:" or "" or "ns:")
+    const prefixMatch = xml.match(/<(\w+):sheetData[\s>]/);
+    const p = prefixMatch ? prefixMatch[1] + ':' : '';
+    // Also detect closing tag style
+    const closeRow = `</${p}row>`;
+    const closeC = `</${p}c>`;
+    const closeSD = `</${p}sheetData>`;
+
+    console.log(`Detected namespace prefix: "${p}" (closeRow=${closeRow})`);
+
     for (const [cellRef, value] of Object.entries(updates)) {
       const rowNum = cellRef.replace(/[A-Z]+/g, '');
       const escaped = value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      const newCellXml = `<c r="${cellRef}" t="inlineStr"><is><t>${escaped}</t></is></c>`;
-
-      // Step 1: Try to find and replace existing cell
-      // Match <c ...r="B11"...>...</c> or <c ...r="B11".../>
-      const cellWithContent = new RegExp(`<c\\b([^>]*\\br="${cellRef}"[^>]*)>([\\s\\S]*?)</c>`);
-      const cellSelfClose = new RegExp(`<c\\b([^>]*\\br="${cellRef}"[^>]*)/>`);
+      const newCellXml = `<${p}c r="${cellRef}" t="inlineStr"><${p}is><${p}t>${escaped}</${p}t></${p}is></${p}c>`;
 
       let matched = false;
 
-      if (cellWithContent.test(xml)) {
-        const m = xml.match(cellWithContent);
-        const styleMatch = m[1].match(/\bs="(\d+)"/);
-        const style = styleMatch ? ` s="${styleMatch[1]}"` : '';
-        xml = xml.replace(cellWithContent, `<c r="${cellRef}"${style} t="inlineStr"><is><t>${escaped}</t></is></c>`);
+      // Step 1: Find existing cell with content: <c ...r="B11"...>...</c>
+      const cellContentRe = new RegExp(`<${p}c\\b([^>]*\\br="${cellRef}"[^>]*)>([\\s\\S]*?)${closeC.replace('/', '\\/')}`);
+      // Find existing self-closing cell: <c ...r="B11".../>
+      const cellEmptyRe = new RegExp(`<${p}c\\b([^>]*\\br="${cellRef}"[^>]*)\\/>`);
+
+      if (cellContentRe.test(xml)) {
+        const m = xml.match(cellContentRe);
+        const sMatch = m[1].match(/\bs="(\d+)"/);
+        const s = sMatch ? ` s="${sMatch[1]}"` : '';
+        xml = xml.replace(cellContentRe, `<${p}c r="${cellRef}"${s} t="inlineStr"><${p}is><${p}t>${escaped}</${p}t></${p}is></${p}c>`);
         matched = true;
-      } else if (cellSelfClose.test(xml)) {
-        const m = xml.match(cellSelfClose);
-        const styleMatch = m[1].match(/\bs="(\d+)"/);
-        const style = styleMatch ? ` s="${styleMatch[1]}"` : '';
-        xml = xml.replace(cellSelfClose, `<c r="${cellRef}"${style} t="inlineStr"><is><t>${escaped}</t></is></c>`);
+      } else if (cellEmptyRe.test(xml)) {
+        const m = xml.match(cellEmptyRe);
+        const sMatch = m[1].match(/\bs="(\d+)"/);
+        const s = sMatch ? ` s="${sMatch[1]}"` : '';
+        xml = xml.replace(cellEmptyRe, `<${p}c r="${cellRef}"${s} t="inlineStr"><${p}is><${p}t>${escaped}</${p}t></${p}is></${p}c>`);
         matched = true;
       }
 
       if (!matched) {
-        // Step 2: Cell doesn't exist — find row and append cell before </row>
-        const rowWithContent = new RegExp(`(<row\\b[^>]*\\br="${rowNum}"[^>]*>)([\\s\\S]*?)(</row>)`);
-        const rowSelfClose = new RegExp(`(<row\\b[^>]*\\br="${rowNum}"[^>]*)(/\\s*>)`);
+        // Step 2: Cell doesn't exist — find row and insert before </row>
+        const rowRe = new RegExp(`(<${p}row\\b[^>]*\\br="${rowNum}"[^>]*>)([\\s\\S]*?)(${closeRow.replace('/', '\\/')})`);
+        const rowEmptyRe = new RegExp(`(<${p}row\\b[^>]*\\br="${rowNum}"[^>]*)\\/>`);
 
-        if (rowWithContent.test(xml)) {
-          xml = xml.replace(rowWithContent, `$1$2${newCellXml}$3`);
+        if (rowRe.test(xml)) {
+          xml = xml.replace(rowRe, `$1$2${newCellXml}$3`);
           matched = true;
-        } else if (rowSelfClose.test(xml)) {
-          xml = xml.replace(rowSelfClose, `$1>${newCellXml}</row>`);
+        } else if (rowEmptyRe.test(xml)) {
+          xml = xml.replace(rowEmptyRe, `$1>${newCellXml}${closeRow}`);
           matched = true;
         }
       }
 
       if (!matched) {
         // Step 3: Row doesn't exist — add before </sheetData>
-        xml = xml.replace('</sheetData>', `<row r="${rowNum}">${newCellXml}</row></sheetData>`);
+        xml = xml.replace(closeSD, `<${p}row r="${rowNum}">${newCellXml}${closeRow}${closeSD}`);
         matched = true;
       }
 
