@@ -20,30 +20,36 @@ function renderVerificationTable(result) {
     const hasRealValue = knownValue && knownValue.length > 0;
     const needsValidation = !hasRealValue;
 
-    // Check if this cell has dropdown options
-    const cellRef = (champ.cellule_ou_position || '').toUpperCase();
-    const dropdownOptions = APP.dataValidations?.[cellRef] || [];
-    // Also try matching by label in menu columns
-    const labelLower = (champ.label_original || '').toLowerCase();
-    let menuOptions = dropdownOptions;
-    if (menuOptions.length === 0 && APP.dataValidations) {
-      for (const [key, opts] of Object.entries(APP.dataValidations)) {
-        if (key.startsWith('_menu_') && labelLower.includes(key.replace('_menu_', '').toLowerCase())) {
-          menuOptions = opts;
-          break;
-        }
-      }
-    }
+    // Determine input type from Claude's analysis
+    const menuOptions = champ.options_menu || [];
+    const typeSaisie = (champ.type_saisie || 'texte').toLowerCase();
 
-    // Build value input: dropdown if options available, otherwise text input
+    // Build value input based on type
     let valueHtml;
     if (menuOptions.length > 0 && needsValidation) {
+      // Dropdown / menu déroulant
       valueHtml = `<select class="field-input field-select" id="input_field_${idx}"
                      data-field-idx="${idx}" data-needs-validation="${needsValidation}">
                      <option value="">— Sélectionner —</option>
                      ${menuOptions.map(opt => `<option value="${escapeHtml(opt)}" ${opt === prefilledValue ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
                    </select>`;
+    } else if ((typeSaisie === 'checkbox' || typeSaisie === 'oui_non') && needsValidation) {
+      // Checkbox / Oui-Non
+      valueHtml = `<select class="field-input field-select" id="input_field_${idx}"
+                     data-field-idx="${idx}" data-needs-validation="${needsValidation}">
+                     <option value="">— Sélectionner —</option>
+                     <option value="Oui" ${prefilledValue === 'Oui' ? 'selected' : ''}>Oui</option>
+                     <option value="Non" ${prefilledValue === 'Non' ? 'selected' : ''}>Non</option>
+                   </select>`;
+    } else if (typeSaisie === 'date' && needsValidation) {
+      // Date field
+      valueHtml = `<input type="date" class="field-input"
+                     id="input_field_${idx}"
+                     value="${escapeHtml(prefilledValue)}"
+                     data-field-idx="${idx}"
+                     data-needs-validation="${needsValidation}">`;
     } else {
+      // Default text input
       valueHtml = `<input type="text" class="field-input ${needsValidation ? '' : 'validated'}"
                      id="input_field_${idx}"
                      value="${escapeHtml(prefilledValue)}"
@@ -115,15 +121,17 @@ function renderVerificationTable(result) {
     });
   });
 
-  // Handle both input and select changes
-  document.querySelectorAll('.field-input').forEach(input => {
-    const eventType = input.tagName === 'SELECT' ? 'change' : 'input';
-    input.addEventListener(eventType, (e) => {
-      const fieldIdx = e.target.dataset.fieldIdx;
-      const unknownIdx = e.target.dataset.unknownIdx;
-      if (fieldIdx !== undefined) APP.fieldValues[`field_${fieldIdx}`] = e.target.value;
-      if (unknownIdx !== undefined) APP.fieldValues[`unknown_${unknownIdx}`] = e.target.value;
-      updateValidateButton();
+  // Handle input, select, and date changes
+  document.querySelectorAll('.field-input').forEach(el => {
+    const events = el.tagName === 'SELECT' ? ['change'] : ['input', 'change'];
+    events.forEach(evt => {
+      el.addEventListener(evt, (e) => {
+        const fieldIdx = e.target.dataset.fieldIdx;
+        const unknownIdx = e.target.dataset.unknownIdx;
+        if (fieldIdx !== undefined) APP.fieldValues[`field_${fieldIdx}`] = e.target.value;
+        if (unknownIdx !== undefined) APP.fieldValues[`unknown_${unknownIdx}`] = e.target.value;
+        updateValidateButton();
+      });
     });
   });
 
