@@ -377,7 +377,7 @@ function renderAliases() {
     html += `
       <div class="alias-item">
         <span><span class="alias-label">${escapeHtml(label)}</span> → <span class="alias-category">${escapeHtml(cat)}</span></span>
-        <button class="btn btn-danger btn-sm" onclick="deleteAlias('${escapeHtml(label)}')">Supprimer</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteAlias(${escapeHtml(JSON.stringify(label))})">Supprimer</button>
       </div>
     `;
   });
@@ -393,17 +393,17 @@ function renderDocValidityForm() {
   Object.entries(docs).forEach(([key, doc]) => {
     const freq = doc.frequence_renouvellement_mois
       ? `Renouvellement : tous les ${doc.frequence_renouvellement_mois} mois`
-      : (doc.date_validite ? `Expire le : ${formatDate(doc.date_validite)}` : '');
+      : (doc.date_validite ? `Expire le : ${doc.date_validite}` : '');
 
     html += `
       <div class="form-group">
         <label>${doc.description || key} <small style="color:var(--text-muted);">(${freq})</small></label>
-        <input type="date" data-doc-key="${key}" class="doc-date-field"
-               value="${doc.date_obtention || ''}">
+        <input type="text" data-doc-key="${key}" class="doc-date-field"
+               value="${doc.date_obtention || ''}" placeholder="Ex: Mars 2026">
         ${doc.date_validite !== undefined ? `
           <label style="margin-top:4px;font-size:.8rem;">Date d'expiration</label>
-          <input type="date" data-doc-key="${key}" data-field="expiration" class="doc-expiry-field"
-                 value="${doc.date_validite || ''}">
+          <input type="text" data-doc-key="${key}" data-field="expiration" class="doc-expiry-field"
+                 value="${doc.date_validite || ''}" placeholder="Ex: 29/12/2027">
         ` : ''}
       </div>
     `;

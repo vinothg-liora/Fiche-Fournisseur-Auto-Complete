@@ -127,7 +127,7 @@ function initButtons() {
     // Learn from unknown fields
     document.querySelectorAll('.alias-cb:checked').forEach(cb => {
       const idx = cb.dataset.unknownIdx;
-      const label = APP.analysisResult.champs_inconnus[idx]?.label_original;
+      const label = APP.analysisResult.champs_inconnus?.[idx]?.label_original;
       const catInput = document.querySelector(`.category-input[data-unknown-idx="${idx}"]`);
       const category = catInput?.value || label;
       if (label) {
@@ -172,10 +172,10 @@ function initButtons() {
     }
   });
 
-  document.getElementById('btnDownload').addEventListener('click', () => {
-    if (APP.fileType === 'xlsx') generateCompletedExcel();
-    else if (APP.fileType === 'pdf-form') generateCompletedPDFForm();
-    else generateRecapPDF();
+  document.getElementById('btnDownload').addEventListener('click', async () => {
+    if (APP.fileType === 'xlsx') await generateCompletedExcel();
+    else if (APP.fileType === 'pdf-form') await generateCompletedPDFForm();
+    else await generateRecapPDF();
   });
 
   document.getElementById('btnEmailRecap').addEventListener('click', () => {
