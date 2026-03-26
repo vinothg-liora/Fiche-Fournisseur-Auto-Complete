@@ -250,6 +250,12 @@ async function generateCompletedExcel() {
       updatesBySheet[targetPath][cellRef] = value;
     });
 
+    // Debug: log what we're about to write
+    console.log('=== Excel Generation Debug ===');
+    for (const [xmlPath, updates] of Object.entries(updatesBySheet)) {
+      console.log(`Sheet: ${xmlPath}`, updates);
+    }
+
     // 3. Apply updates to each sheet XML
     for (const [xmlPath, updates] of Object.entries(updatesBySheet)) {
       const file = zip.file(xmlPath);
@@ -294,13 +300,14 @@ async function buildSheetMap(zip) {
   try {
     // Parse workbook.xml to get sheet names and rIds
     const wbXml = await zip.file('xl/workbook.xml').async('string');
-    const sheetTags = wbXml.match(/<sheet\s[^>]*\/>/gi) || [];
+    // Match <sheet> tags — both self-closing and not, with any attributes
+    const sheetTags = wbXml.match(/<sheet\s[^>]*>/gi) || [];
 
     // Parse relationships to map rId → file path
     const relsFile = zip.file('xl/_rels/workbook.xml.rels');
     const relsXml = relsFile ? await relsFile.async('string') : '';
     const relMap = {};
-    const relMatches = relsXml.match(/<Relationship\s[^>]*\/>/gi) || [];
+    const relMatches = relsXml.match(/<Relationship\s[^>]*>/gi) || [];
     relMatches.forEach(rel => {
       const id = (rel.match(/Id="([^"]+)"/) || [])[1];
       const target = (rel.match(/Target="([^"]+)"/) || [])[1];
@@ -311,14 +318,19 @@ async function buildSheetMap(zip) {
 
     sheetTags.forEach(tag => {
       const name = (tag.match(/name="([^"]+)"/) || [])[1];
-      const rId = (tag.match(/r:id="([^"]+)"/i) || [])[1];
+      // r:id can also appear as r:Id or just id in some files
+      const rId = (tag.match(/r:id="([^"]+)"/i) || tag.match(/\bId="(rId\d+)"/i) || [])[1];
       if (name && rId && relMap[rId]) {
         map.byName[name.toLowerCase()] = relMap[rId];
         map.byIndex.push({ name, path: relMap[rId] });
       }
     });
   } catch (e) {
-    // Fallback: enumerate sheet files directly
+    console.warn('buildSheetMap: parsing failed, using fallback', e);
+  }
+
+  // Fallback: if no sheets found, enumerate files directly
+  if (map.byIndex.length === 0) {
     zip.folder('xl/worksheets').forEach((path) => {
       if (path.match(/^sheet\d+\.xml$/)) {
         const fullPath = 'xl/worksheets/' + path;
@@ -330,6 +342,7 @@ async function buildSheetMap(zip) {
     });
   }
 
+  console.log('Sheet map:', JSON.stringify(map, null, 2));
   return map;
 }
 
@@ -337,33 +350,37 @@ async function buildSheetMap(zip) {
 function updateCellInXml(sheetXml, cellRef, row, value) {
   const escapedValue = escapeXml(value);
 
-  // Try to find existing cell: <c r="B11" ...>...</c> or <c r="B11" .../>
+  // Try to find existing cell — matches <c r="B11" ...>...</c> or <c r="B11" .../>
+  // The r= attribute can appear anywhere in the tag attributes
   const cellRegex = new RegExp(
-    `(<c\\s[^>]*?r="${cellRef}"[^>]*?)(\\s*/>|>([\\s\\S]*?)<\\/c>)`, 'i'
+    `(<c\\b[^>]*?\\br="${cellRef}"[^>]*?)(\\s*/>|>([\\s\\S]*?)<\\/c>)`,
   );
   const cellMatch = sheetXml.match(cellRegex);
 
   if (cellMatch) {
     // Cell exists — replace content, keep style (s="N"), use inlineStr
     let openTag = cellMatch[1];
-    // Remove old type attribute
+    // Remove old type attribute if present
     openTag = openTag.replace(/\s+t="[^"]*"/g, '');
     const newCell = `${openTag} t="inlineStr"><is><t>${escapedValue}</t></is></c>`;
     return { xml: sheetXml.replace(cellRegex, newCell), changed: true };
   }
 
   // Cell doesn't exist — find the row and insert
+  // Row tag: <row r="11" ...>...</row> — r= can be anywhere in attributes
   const rowRegex = new RegExp(
-    `(<row\\s[^>]*?r="${row}"[^>]*?)(\\s*/>|>([\\s\\S]*?)<\\/row>)`, 'i'
+    `(<row\\b[^>]*?\\br="${row}"[^>]*?)(\\s*/>|>([\\s\\S]*?)<\\/row>)`,
   );
   const rowMatch = sheetXml.match(rowRegex);
   const newCellXml = `<c r="${cellRef}" t="inlineStr"><is><t>${escapedValue}</t></is></c>`;
 
   if (rowMatch) {
-    if (rowMatch[2].trim() === '/>') {
+    if (rowMatch[2].trim().startsWith('/>')) {
+      // Self-closing row — open it and add cell
       const newXml = sheetXml.replace(rowRegex, `${rowMatch[1]}>${newCellXml}</row>`);
       return { xml: newXml, changed: true };
     } else {
+      // Row has children — append cell
       const newXml = sheetXml.replace(rowRegex,
         `${rowMatch[1]}>${rowMatch[3]}${newCellXml}</row>`);
       return { xml: newXml, changed: true };
