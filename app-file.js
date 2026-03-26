@@ -199,100 +199,32 @@ function arrayBufferToBase64(buffer) {
 /* ===== Document Generation ===== */
 
 async function generateCompletedExcel() {
-  if (!APP.analysisResult) return;
+  if (!APP.workbook || !APP.analysisResult) return;
 
-  // For .xls (old binary format), use XLSX.js workbook modification
-  // For .xlsx, use JSZip to preserve full formatting
-  if (APP.fileType === 'xls') {
-    return generateCompletedXls();
-  }
-
-  if (!APP.fileContent) return;
   try {
-    const zip = await JSZip.loadAsync(APP.fileContent);
+    // Step 1: Write values into the XLSX.js workbook (reliable, always works)
+    writeCellsToWorkbook();
 
-    // 1. Build sheet name → XML file path mapping from workbook.xml.rels + workbook.xml
-    const sheetMap = await buildSheetMap(zip);
+    // Step 2: Generate xlsx with XLSX.js (has data, may lose some formatting)
+    const xlsxData = XLSX.write(APP.workbook, { bookType: 'xlsx', type: 'array' });
 
-    // 2. Collect all values to write, grouped by sheet
-    // Format: { sheetXmlPath: { cellRef: value } }
-    const updatesBySheet = {};
-
-    APP.analysisResult.champs.forEach((champ, idx) => {
-      let raw = (champ.cellule_ou_position || '').trim();
-      if (!raw) return;
-      const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
-      if (!value) return;
-
-      let sheetName = null;
-      let cellRef = raw;
-
-      // Handle "SheetName!B11" or "'Sheet Name'!B11" format
-      if (raw.includes('!')) {
-        const parts = raw.split('!');
-        sheetName = parts[0].replace(/^'|'$/g, '');
-        cellRef = parts[1];
-      }
-
-      // Handle range refs like "A33-A34" or "A33:A34" — use first cell
-      cellRef = cellRef.split(/[-:]/)[0].trim().toUpperCase();
-
-      if (!/^[A-Z]+\d+$/.test(cellRef)) return;
-
-      // Determine target XML path
-      let targetPath = null;
-      if (sheetName) {
-        targetPath = sheetMap.byName[sheetName.toLowerCase()];
-      }
-      if (!targetPath) {
-        // Default: write to ALL data sheets (skip known non-data sheets like "Menus")
-        // This ensures the cell is found wherever it is
-        for (const [name, path] of Object.entries(sheetMap.byName)) {
-          if (['menus', 'menu', 'listes', 'lists', 'paramètres', 'config'].includes(name)) continue;
-          if (!updatesBySheet[path]) updatesBySheet[path] = {};
-          updatesBySheet[path][cellRef] = value;
-        }
-        return;
-      }
-
-      if (!updatesBySheet[targetPath]) updatesBySheet[targetPath] = {};
-      updatesBySheet[targetPath][cellRef] = value;
-    });
-
-    // Debug: log what we're about to write
-    console.log('=== Excel Generation Debug ===');
-    for (const [xmlPath, updates] of Object.entries(updatesBySheet)) {
-      console.log(`Sheet: ${xmlPath}`, updates);
+    // Step 3: If we have the original file, restore formatting from it
+    // by copying styles/themes/images from original ZIP into the new ZIP
+    let outputBlob;
+    if (APP.fileType === 'xlsx' && APP.fileContent) {
+      outputBlob = await restoreFormatting(xlsxData, APP.fileContent);
+    } else {
+      outputBlob = new Blob([xlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     }
 
-    // 3. Apply updates to each sheet XML using DOM parsing
-    for (const [xmlPath, updates] of Object.entries(updatesBySheet)) {
-      const file = zip.file(xmlPath);
-      if (!file) { console.warn('Sheet file not found:', xmlPath); continue; }
-
-      const sheetXml = await file.async('string');
-
-      // Debug: show XML structure around row tags
-      console.log('XML snippet (first 500 chars of sheetData):', sheetXml.substring(sheetXml.indexOf('sheetData') - 1, sheetXml.indexOf('sheetData') + 500));
-
-      const updatedXml = updateSheetXmlDOM(sheetXml, updates);
-
-      if (updatedXml) {
-        // Verify changes were made
-        const sampleRef = Object.keys(updates)[0];
-        console.log('Verification - looking for', sampleRef, 'in output:', updatedXml.includes(sampleRef));
-        zip.file(xmlPath, updatedXml);
-      }
+    const ext = APP.fileType === 'xls' ? 'xls' : 'xlsx';
+    if (APP.fileType === 'xls') {
+      // For .xls, write as xls directly
+      const xlsData = XLSX.write(APP.workbook, { bookType: 'xls', type: 'array' });
+      outputBlob = new Blob([xlsData], { type: 'application/vnd.ms-excel' });
     }
 
-    // 4. Generate the modified zip
-    const blob = await zip.generateAsync({
-      type: 'blob',
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      compression: 'DEFLATE'
-    });
-
-    downloadBlob(blob, APP.uploadedFileName.replace(/\.xlsx?$/i, '_complété.xlsx'));
+    downloadBlob(outputBlob, APP.uploadedFileName.replace(/\.xlsx?$/i, `_complété.${ext}`));
     showToast('Document Excel complété téléchargé !');
   } catch (e) {
     console.error('Erreur génération Excel:', e);
@@ -300,222 +232,112 @@ async function generateCompletedExcel() {
   }
 }
 
-// Build mapping: sheet name (lowercase) → xl/worksheets/sheetN.xml path
-async function buildSheetMap(zip) {
-  const map = { byName: {}, byIndex: [] };
+// Write all field values into the XLSX.js workbook object
+function writeCellsToWorkbook() {
+  APP.analysisResult.champs.forEach((champ, idx) => {
+    let raw = (champ.cellule_ou_position || '').trim();
+    if (!raw) return;
+    const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
+    if (!value) return;
 
-  try {
-    // Parse workbook.xml to get sheet names and rIds
-    const wbXml = await zip.file('xl/workbook.xml').async('string');
-    // Match <sheet> tags — both self-closing and not, with any attributes
-    const sheetTags = wbXml.match(/<sheet\s[^>]*>/gi) || [];
+    // Parse sheet name and cell ref
+    let sheetName = null;
+    let cellRef = raw;
+    if (raw.includes('!')) {
+      const parts = raw.split('!');
+      sheetName = parts[0].replace(/^'|'$/g, '');
+      cellRef = parts[1];
+    }
+    cellRef = cellRef.split(/[-:]/)[0].trim().toUpperCase();
+    if (!/^[A-Z]+\d+$/.test(cellRef)) return;
 
-    // Parse relationships to map rId → file path
-    const relsFile = zip.file('xl/_rels/workbook.xml.rels');
-    const relsXml = relsFile ? await relsFile.async('string') : '';
-    const relMap = {};
-    const relMatches = relsXml.match(/<Relationship\s[^>]*>/gi) || [];
-    relMatches.forEach(rel => {
-      const id = (rel.match(/Id="([^"]+)"/) || [])[1];
-      const target = (rel.match(/Target="([^"]+)"/) || [])[1];
-      if (id && target) {
-        relMap[id] = target.startsWith('/') ? target.substring(1) : 'xl/' + target;
+    // Find target sheets
+    const targetSheets = [];
+    if (sheetName) {
+      const found = APP.workbook.SheetNames.find(n => n.toLowerCase() === sheetName.toLowerCase());
+      if (found) targetSheets.push(found);
+    }
+    if (targetSheets.length === 0) {
+      APP.workbook.SheetNames.forEach(n => {
+        if (!['menus', 'menu', 'listes', 'lists'].includes(n.toLowerCase())) {
+          targetSheets.push(n);
+        }
+      });
+    }
+
+    // Write to each target sheet
+    targetSheets.forEach(name => {
+      const sheet = APP.workbook.Sheets[name];
+      if (!sheet) return;
+      const existing = sheet[cellRef];
+      if (existing) {
+        existing.v = value;
+        existing.t = 's';
+        delete existing.w;
+      } else {
+        sheet[cellRef] = { t: 's', v: value };
       }
+      console.log(`  Written: ${name}!${cellRef} = "${value}"`);
     });
-
-    sheetTags.forEach(tag => {
-      const name = (tag.match(/name="([^"]+)"/) || [])[1];
-      // r:id can also appear as r:Id or just id in some files
-      const rId = (tag.match(/r:id="([^"]+)"/i) || tag.match(/\bId="(rId\d+)"/i) || [])[1];
-      if (name && rId && relMap[rId]) {
-        map.byName[name.toLowerCase()] = relMap[rId];
-        map.byIndex.push({ name, path: relMap[rId] });
-      }
-    });
-  } catch (e) {
-    console.warn('buildSheetMap: parsing failed, using fallback', e);
-  }
-
-  // Fallback: if no sheets found, enumerate files directly
-  if (map.byIndex.length === 0) {
-    zip.folder('xl/worksheets').forEach((path) => {
-      if (path.match(/^sheet\d+\.xml$/)) {
-        const fullPath = 'xl/worksheets/' + path;
-        const idx = map.byIndex.length;
-        const name = `Sheet${idx + 1}`;
-        map.byName[name.toLowerCase()] = fullPath;
-        map.byIndex.push({ name, path: fullPath });
-      }
-    });
-  }
-
-  console.log('Sheet map:', JSON.stringify(map, null, 2));
-  return map;
+  });
 }
 
-// Pure string manipulation — supports optional namespace prefixes (e.g. <x:c>, <x:row>)
-function updateSheetXmlDOM(sheetXml, updates) {
+// Restore formatting: copy styles/themes/images from original xlsx into new xlsx
+async function restoreFormatting(newXlsxData, originalData) {
   try {
-    let xml = sheetXml;
-    let changeCount = 0;
+    const origZip = await JSZip.loadAsync(originalData);
+    const newZip = await JSZip.loadAsync(newXlsxData);
 
-    // Detect namespace prefix used for cells/rows (e.g. "x:" or "" or "ns:")
-    const prefixMatch = xml.match(/<(\w+):sheetData[\s>]/);
-    const p = prefixMatch ? prefixMatch[1] + ':' : '';
-    // Also detect closing tag style
-    const closeRow = `</${p}row>`;
-    const closeC = `</${p}c>`;
-    const closeSD = `</${p}sheetData>`;
+    // Files that contain formatting — copy from original to new
+    const formatFiles = [
+      'xl/styles.xml',
+      'xl/theme/theme1.xml',
+      'xl/sharedStrings.xml',
+    ];
 
-    console.log(`Detected namespace prefix: "${p}" (closeRow=${closeRow})`);
+    // Copy all media files (images, logos)
+    origZip.folder('xl/media')?.forEach((path, file) => {
+      newZip.file('xl/media/' + path, file.async('uint8array'));
+    });
 
-    for (const [cellRef, value] of Object.entries(updates)) {
-      const rowNum = cellRef.replace(/[A-Z]+/g, '');
-      const escaped = value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      const newCellXml = `<${p}c r="${cellRef}" t="inlineStr"><${p}is><${p}t>${escaped}</${p}t></${p}is></${p}c>`;
+    // Copy drawing files (charts, shapes)
+    origZip.folder('xl/drawings')?.forEach((path, file) => {
+      newZip.file('xl/drawings/' + path, file.async('uint8array'));
+    });
 
-      let matched = false;
+    // Copy drawing rels
+    origZip.folder('xl/drawings/_rels')?.forEach((path, file) => {
+      newZip.file('xl/drawings/_rels/' + path, file.async('uint8array'));
+    });
 
-      // Step 1: Find existing cell with content: <c ...r="B11"...>...</c>
-      const cellContentRe = new RegExp(`<${p}c\\b([^>]*\\br="${cellRef}"[^>]*)>([\\s\\S]*?)${closeC.replace('/', '\\/')}`);
-      // Find existing self-closing cell: <c ...r="B11".../>
-      const cellEmptyRe = new RegExp(`<${p}c\\b([^>]*\\br="${cellRef}"[^>]*)\\/>`);
+    // Copy worksheet rels (for images linked to sheets)
+    origZip.folder('xl/worksheets/_rels')?.forEach((path, file) => {
+      newZip.file('xl/worksheets/_rels/' + path, file.async('uint8array'));
+    });
 
-      if (cellContentRe.test(xml)) {
-        const m = xml.match(cellContentRe);
-        const sMatch = m[1].match(/\bs="(\d+)"/);
-        const s = sMatch ? ` s="${sMatch[1]}"` : '';
-        xml = xml.replace(cellContentRe, `<${p}c r="${cellRef}"${s} t="inlineStr"><${p}is><${p}t>${escaped}</${p}t></${p}is></${p}c>`);
-        matched = true;
-      } else if (cellEmptyRe.test(xml)) {
-        const m = xml.match(cellEmptyRe);
-        const sMatch = m[1].match(/\bs="(\d+)"/);
-        const s = sMatch ? ` s="${sMatch[1]}"` : '';
-        xml = xml.replace(cellEmptyRe, `<${p}c r="${cellRef}"${s} t="inlineStr"><${p}is><${p}t>${escaped}</${p}t></${p}is></${p}c>`);
-        matched = true;
-      }
-
-      if (!matched) {
-        // Step 2: Cell doesn't exist — find row and insert before </row>
-        const rowRe = new RegExp(`(<${p}row\\b[^>]*\\br="${rowNum}"[^>]*>)([\\s\\S]*?)(${closeRow.replace('/', '\\/')})`);
-        const rowEmptyRe = new RegExp(`(<${p}row\\b[^>]*\\br="${rowNum}"[^>]*)\\/>`);
-
-        if (rowRe.test(xml)) {
-          xml = xml.replace(rowRe, `$1$2${newCellXml}$3`);
-          matched = true;
-        } else if (rowEmptyRe.test(xml)) {
-          xml = xml.replace(rowEmptyRe, `$1>${newCellXml}${closeRow}`);
-          matched = true;
-        }
-      }
-
-      if (!matched) {
-        // Step 3: Row doesn't exist — add before </sheetData>
-        xml = xml.replace(closeSD, `<${p}row r="${rowNum}">${newCellXml}${closeRow}${closeSD}`);
-        matched = true;
-      }
-
-      if (matched) {
-        changeCount++;
-        console.log(`  Written: ${cellRef} = "${value}"`);
-      } else {
-        console.warn(`  FAILED: ${cellRef}`);
+    // Copy format files
+    for (const f of formatFiles) {
+      const origFile = origZip.file(f);
+      if (origFile) {
+        newZip.file(f, await origFile.async('uint8array'));
       }
     }
 
-    console.log(`Total cells written: ${changeCount}`);
-    return xml;
-  } catch (e) {
-    console.error('updateSheetXmlDOM error:', e);
-    return null;
-  }
-}
+    // Copy [Content_Types].xml from original (includes references to media)
+    const ct = origZip.file('[Content_Types].xml');
+    if (ct) {
+      newZip.file('[Content_Types].xml', await ct.async('string'));
+    }
 
-// Generate completed .xls using XLSX.js (modifies workbook in memory, writes back as .xls)
-function generateCompletedXls() {
-  if (!APP.workbook || !APP.analysisResult) return;
-
-  try {
-    // Modify the workbook cells directly
-    APP.analysisResult.champs.forEach((champ, idx) => {
-      let raw = (champ.cellule_ou_position || '').trim();
-      if (!raw) return;
-      const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
-      if (!value) return;
-
-      // Handle "SheetName!B11" format
-      let sheetName = null;
-      let cellRef = raw;
-      if (raw.includes('!')) {
-        const parts = raw.split('!');
-        sheetName = parts[0].replace(/^'|'$/g, '');
-        cellRef = parts[1];
-      }
-      cellRef = cellRef.split(/[-:]/)[0].trim().toUpperCase();
-      if (!/^[A-Z]+\d+$/.test(cellRef)) return;
-
-      // Find target sheet(s)
-      const targetSheets = [];
-      if (sheetName) {
-        const found = APP.workbook.SheetNames.find(n => n.toLowerCase() === sheetName.toLowerCase());
-        if (found) targetSheets.push(found);
-      }
-      if (targetSheets.length === 0) {
-        // Write to all non-menu sheets
-        APP.workbook.SheetNames.forEach(n => {
-          if (!['menus', 'menu', 'listes', 'lists'].includes(n.toLowerCase())) {
-            targetSheets.push(n);
-          }
-        });
-      }
-
-      // Write value to each target sheet
-      targetSheets.forEach(name => {
-        const sheet = APP.workbook.Sheets[name];
-        if (!sheet) return;
-        const existing = sheet[cellRef];
-        if (existing) {
-          existing.v = value;
-          existing.t = 's';
-          delete existing.w;
-        } else {
-          sheet[cellRef] = { t: 's', v: value };
-        }
-      });
+    return await newZip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      compression: 'DEFLATE'
     });
-
-    // Debug: verify cells were written
-    console.log('=== XLS Generation Debug ===');
-    APP.workbook.SheetNames.forEach(name => {
-      const sheet = APP.workbook.Sheets[name];
-      APP.analysisResult.champs.forEach((champ, idx) => {
-        const ref = (champ.cellule_ou_position || '').split(/[-:!]/).pop().trim().toUpperCase();
-        if (ref && sheet[ref]) {
-          console.log(`  ${name}!${ref} = "${sheet[ref].v}"`);
-        }
-      });
-    });
-
-    // Write back as .xls
-    const wbout = XLSX.write(APP.workbook, { bookType: 'xls', type: 'array' });
-    downloadBlob(
-      new Blob([wbout], { type: 'application/vnd.ms-excel' }),
-      APP.uploadedFileName.replace(/\.xlsx?$/i, '_complété.xls')
-    );
-    showToast('Document Excel complété téléchargé !');
   } catch (e) {
-    console.error('Erreur génération XLS:', e);
-    showToast('Erreur génération Excel: ' + e.message, 'error');
+    console.warn('Could not restore formatting, using XLSX.js output:', e.message);
+    return new Blob([newXlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
-}
-
-function escapeXml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
 }
 
 async function generateCompletedPDFForm() {
