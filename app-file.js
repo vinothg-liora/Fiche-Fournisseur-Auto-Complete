@@ -21,20 +21,11 @@ async function processFile(file) {
 }
 
 async function processExcel(arrayBuffer, fileName) {
-  APP.fileType = 'xlsx';
-  const ext = fileName.split('.').pop().toLowerCase();
+  APP.fileType = fileName.split('.').pop().toLowerCase() === 'xls' ? 'xls' : 'xlsx';
 
   // Read the workbook
   const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true, cellFormula: true, cellDates: true });
   APP.workbook = workbook;
-
-  // For .xls files (old binary format), convert to .xlsx in memory for JSZip later
-  // JSZip needs a ZIP-based .xlsx, not a BIFF .xls
-  if (ext === 'xls') {
-    const xlsxData = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });
-    APP.fileContent = new Uint8Array(xlsxData);
-    APP.uploadedFileName = fileName.replace(/\.xls$/i, '.xlsx');
-  }
 
   // Extract data validation (dropdown) options per cell
   APP.dataValidations = {};
@@ -208,8 +199,14 @@ function arrayBufferToBase64(buffer) {
 /* ===== Document Generation ===== */
 
 async function generateCompletedExcel() {
-  if (!APP.fileContent || !APP.analysisResult) return;
+  if (!APP.analysisResult) return;
 
+  // Route to the right method based on original file format
+  if (APP.fileType === 'xls') {
+    return generateCompletedXls();
+  }
+
+  if (!APP.fileContent) return;
   try {
     const zip = await JSZip.loadAsync(APP.fileContent);
 
@@ -404,6 +401,72 @@ function updateCellInXml(sheetXml, cellRef, row, value) {
     xml: sheetXml.replace('</sheetData>', `${newRowXml}</sheetData>`),
     changed: true
   };
+}
+
+// Generate completed .xls using XLSX.js (modifies workbook in memory, writes back as .xls)
+function generateCompletedXls() {
+  if (!APP.workbook || !APP.analysisResult) return;
+
+  try {
+    // Modify the workbook cells directly
+    APP.analysisResult.champs.forEach((champ, idx) => {
+      let raw = (champ.cellule_ou_position || '').trim();
+      if (!raw) return;
+      const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
+      if (!value) return;
+
+      // Handle "SheetName!B11" format
+      let sheetName = null;
+      let cellRef = raw;
+      if (raw.includes('!')) {
+        const parts = raw.split('!');
+        sheetName = parts[0].replace(/^'|'$/g, '');
+        cellRef = parts[1];
+      }
+      cellRef = cellRef.split(/[-:]/)[0].trim().toUpperCase();
+      if (!/^[A-Z]+\d+$/.test(cellRef)) return;
+
+      // Find target sheet(s)
+      const targetSheets = [];
+      if (sheetName) {
+        const found = APP.workbook.SheetNames.find(n => n.toLowerCase() === sheetName.toLowerCase());
+        if (found) targetSheets.push(found);
+      }
+      if (targetSheets.length === 0) {
+        // Write to all non-menu sheets
+        APP.workbook.SheetNames.forEach(n => {
+          if (!['menus', 'menu', 'listes', 'lists'].includes(n.toLowerCase())) {
+            targetSheets.push(n);
+          }
+        });
+      }
+
+      // Write value to each target sheet
+      targetSheets.forEach(name => {
+        const sheet = APP.workbook.Sheets[name];
+        if (!sheet) return;
+        const existing = sheet[cellRef];
+        if (existing) {
+          existing.v = value;
+          existing.t = 's';
+          delete existing.w;
+        } else {
+          sheet[cellRef] = { t: 's', v: value };
+        }
+      });
+    });
+
+    // Write back as .xls (preserves original format type)
+    const wbout = XLSX.write(APP.workbook, { bookType: 'xls', type: 'array' });
+    downloadBlob(
+      new Blob([wbout], { type: 'application/vnd.ms-excel' }),
+      APP.uploadedFileName.replace(/\.xlsx?$/i, '_complété.xls')
+    );
+    showToast('Document Excel complété téléchargé !');
+  } catch (e) {
+    console.error('Erreur génération XLS:', e);
+    showToast('Erreur génération Excel: ' + e.message, 'error');
+  }
 }
 
 function escapeXml(str) {
