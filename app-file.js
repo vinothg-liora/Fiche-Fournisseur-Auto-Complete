@@ -196,37 +196,116 @@ function arrayBufferToBase64(buffer) {
 
 /* ===== Document Generation ===== */
 
-function generateCompletedExcel() {
-  if (!APP.workbook || !APP.analysisResult) return;
+async function generateCompletedExcel() {
+  if (!APP.fileContent || !APP.analysisResult) return;
 
-  // Modify the ORIGINAL workbook in-place to preserve all formatting
-  APP.workbook.SheetNames.forEach(name => {
-    const sheet = APP.workbook.Sheets[name];
+  try {
+    // Load the original xlsx as a ZIP to preserve ALL formatting
+    const zip = await JSZip.loadAsync(APP.fileContent);
 
+    // Collect all values to write: { sheetIndex: { cellRef: value } }
+    const cellUpdates = {};
     APP.analysisResult.champs.forEach((champ, idx) => {
-      const cellRef = champ.cellule_ou_position;
-      if (cellRef && /^[A-Z]+\d+$/i.test(cellRef)) {
-        const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
-        if (value) {
-          const upperRef = cellRef.toUpperCase();
-          const existing = sheet[upperRef];
-          if (existing) {
-            // Preserve existing cell formatting, just update value
-            existing.v = value;
-            existing.t = 's';
-            delete existing.w; // Remove cached formatted text so XLSX recalculates
+      const cellRef = (champ.cellule_ou_position || '').trim().toUpperCase();
+      if (!cellRef || !/^[A-Z]+\d+$/.test(cellRef)) return;
+      const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
+      if (!value) return;
+      // Default to sheet 1 (index 0) — most forms use the first sheet
+      if (!cellUpdates[0]) cellUpdates[0] = {};
+      cellUpdates[0][cellRef] = value;
+    });
+
+    // Find all sheet XML files in the zip
+    const sheetFiles = [];
+    zip.folder('xl/worksheets').forEach((path, file) => {
+      if (path.match(/^sheet\d+\.xml$/)) {
+        sheetFiles.push({ path: 'xl/worksheets/' + path, file });
+      }
+    });
+    sheetFiles.sort((a, b) => a.path.localeCompare(b.path));
+
+    // Also load shared strings table
+    let sstXml = null;
+    let sstEntries = [];
+    const sstFile = zip.file('xl/sharedStrings.xml');
+    if (sstFile) {
+      sstXml = await sstFile.async('string');
+      // Parse existing shared strings
+      const siMatches = sstXml.match(/<si>([\s\S]*?)<\/si>/g) || [];
+      sstEntries = siMatches.map(si => si);
+    }
+
+    // Process each sheet that has updates
+    for (const [sheetIdx, updates] of Object.entries(cellUpdates)) {
+      const idx = parseInt(sheetIdx);
+      if (idx >= sheetFiles.length) continue;
+
+      let sheetXml = await sheetFiles[idx].file.async('string');
+
+      for (const [cellRef, value] of Object.entries(updates)) {
+        const col = cellRef.replace(/\d+/g, '');
+        const row = parseInt(cellRef.replace(/[A-Z]+/g, ''));
+
+        // Try to find existing cell and update it
+        // Match <c r="B11" ...>...</c> or <c r="B11" ... />
+        const cellRegex = new RegExp(`(<c\\s[^>]*r="${cellRef}"[^>]*)(/>|>([\\s\\S]*?)</c>)`, 'i');
+        const cellMatch = sheetXml.match(cellRegex);
+
+        if (cellMatch) {
+          // Cell exists — update its value, change type to inlineStr
+          let cellTag = cellMatch[1];
+          // Remove existing type attribute and add t="inlineStr"
+          cellTag = cellTag.replace(/\s+t="[^"]*"/, '');
+          cellTag = cellTag.replace(/\s+s="(\d+)"/, ' s="$1"'); // keep style
+          const newCell = `${cellTag} t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+          sheetXml = sheetXml.replace(cellRegex, newCell);
+        } else {
+          // Cell doesn't exist — need to insert it in the correct row
+          const rowRegex = new RegExp(`(<row\\s[^>]*r="${row}"[^>]*)(/>|>([\\s\\S]*?)</row>)`, 'i');
+          const rowMatch = sheetXml.match(rowRegex);
+
+          if (rowMatch) {
+            const newCellXml = `<c r="${cellRef}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+            if (rowMatch[2] === '/>') {
+              // Empty row tag — open it and add cell
+              sheetXml = sheetXml.replace(rowRegex, `${rowMatch[1]}>${newCellXml}</row>`);
+            } else {
+              // Row has children — append cell before </row>
+              sheetXml = sheetXml.replace(rowRegex, `${rowMatch[1]}>${rowMatch[3]}${newCellXml}</row>`);
+            }
           } else {
-            sheet[upperRef] = { t: 's', v: value };
+            // Row doesn't exist — insert a new row in sheetData
+            const newRowXml = `<row r="${row}"><c r="${cellRef}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c></row>`;
+            sheetXml = sheetXml.replace('</sheetData>', `${newRowXml}</sheetData>`);
           }
         }
       }
-    });
-  });
 
-  // Write the modified original workbook (preserves styles, merges, etc.)
-  const wbout = XLSX.write(APP.workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });
-  downloadBlob(new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-    APP.uploadedFileName.replace(/\.xlsx?$/i, '_complété.xlsx'));
+      zip.file(sheetFiles[idx].path, sheetXml);
+    }
+
+    // Generate the modified zip
+    const blob = await zip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      compression: 'DEFLATE'
+    });
+
+    downloadBlob(blob, APP.uploadedFileName.replace(/\.xlsx?$/i, '_complété.xlsx'));
+    showToast('Document Excel complété téléchargé !');
+  } catch (e) {
+    console.error('Erreur génération Excel:', e);
+    showToast('Erreur génération Excel: ' + e.message, 'error');
+  }
+}
+
+function escapeXml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
 async function generateCompletedPDFForm() {
