@@ -107,7 +107,7 @@ async function analyzeWithClaude(fileContentBase64, fileName, fileType, textCont
           'anthropic-dangerous-direct-browser-access': 'true'
         },
         body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
+          model: 'claude-sonnet-4-20250514',
           max_tokens: 8000,
           system: SYSTEM_PROMPT,
           messages: messages

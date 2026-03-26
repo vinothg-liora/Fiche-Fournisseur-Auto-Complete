@@ -201,7 +201,8 @@ function arrayBufferToBase64(buffer) {
 async function generateCompletedExcel() {
   if (!APP.analysisResult) return;
 
-  // Route to the right method based on original file format
+  // For .xls (old binary format), use XLSX.js workbook modification
+  // For .xlsx, use JSZip to preserve full formatting
   if (APP.fileType === 'xls') {
     return generateCompletedXls();
   }
@@ -456,7 +457,19 @@ function generateCompletedXls() {
       });
     });
 
-    // Write back as .xls (preserves original format type)
+    // Debug: verify cells were written
+    console.log('=== XLS Generation Debug ===');
+    APP.workbook.SheetNames.forEach(name => {
+      const sheet = APP.workbook.Sheets[name];
+      APP.analysisResult.champs.forEach((champ, idx) => {
+        const ref = (champ.cellule_ou_position || '').split(/[-:!]/).pop().trim().toUpperCase();
+        if (ref && sheet[ref]) {
+          console.log(`  ${name}!${ref} = "${sheet[ref].v}"`);
+        }
+      });
+    });
+
+    // Write back as .xls
     const wbout = XLSX.write(APP.workbook, { bookType: 'xls', type: 'array' });
     downloadBlob(
       new Blob([wbout], { type: 'application/vnd.ms-excel' }),
