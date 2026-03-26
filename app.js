@@ -173,7 +173,7 @@ function initButtons() {
   });
 
   document.getElementById('btnDownload').addEventListener('click', async () => {
-    if (APP.fileType === 'xlsx') await generateCompletedExcel();
+    if (APP.fileType === 'xlsx' || APP.fileType === 'xls') await generateCompletedExcel();
     else if (APP.fileType === 'pdf-form') await generateCompletedPDFForm();
     else await generateRecapPDF();
   });
