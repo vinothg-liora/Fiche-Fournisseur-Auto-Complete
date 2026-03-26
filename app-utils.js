@@ -43,4 +43,6 @@ const APP = {
   analysisResult: null,
   fieldValues: {},
   networkPath: localStorage.getItem('networkPath') || 'company_data.json',
+  pdfPageImages: [],
+  dataValidations: {},
 };

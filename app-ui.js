@@ -185,7 +185,7 @@ function updateValidateButton() {
 
 function escapeHtml(str) {
   if (!str) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* ===== Documents Tab ===== */
@@ -393,17 +393,17 @@ function renderDocValidityForm() {
   Object.entries(docs).forEach(([key, doc]) => {
     const freq = doc.frequence_renouvellement_mois
       ? `Renouvellement : tous les ${doc.frequence_renouvellement_mois} mois`
-      : (doc.date_expiration ? `Expire le : ${formatDate(doc.date_expiration)}` : '');
+      : (doc.date_validite ? `Expire le : ${formatDate(doc.date_validite)}` : '');
 
     html += `
       <div class="form-group">
-        <label>${doc.nom} <small style="color:var(--text-muted);">(${freq})</small></label>
+        <label>${doc.description || key} <small style="color:var(--text-muted);">(${freq})</small></label>
         <input type="date" data-doc-key="${key}" class="doc-date-field"
-               value="${doc.derniere_mise_a_jour || ''}">
-        ${doc.date_expiration !== undefined ? `
+               value="${doc.date_obtention || ''}">
+        ${doc.date_validite !== undefined ? `
           <label style="margin-top:4px;font-size:.8rem;">Date d'expiration</label>
           <input type="date" data-doc-key="${key}" data-field="expiration" class="doc-expiry-field"
-                 value="${doc.date_expiration || ''}">
+                 value="${doc.date_validite || ''}">
         ` : ''}
       </div>
     `;

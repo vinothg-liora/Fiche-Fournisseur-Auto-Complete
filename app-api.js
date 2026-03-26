@@ -132,7 +132,8 @@ async function analyzeWithClaude(fileContentBase64, fileName, fileType, textCont
       }
 
       const result = await response.json();
-      const text = result.content[0].text;
+      const text = result?.content?.[0]?.text;
+      if (!text) throw new Error('Réponse API vide ou format inattendu');
 
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error('Réponse API invalide - pas de JSON trouvé');

@@ -430,46 +430,51 @@ async function generateCompletedPDFForm() {
 }
 
 async function generateRecapPDF() {
-  const pdfDoc = await PDFLib.PDFDocument.create();
-  const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+  try {
+    const pdfDoc = await PDFLib.PDFDocument.create();
+    const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
 
-  let page = pdfDoc.addPage([595, 842]);
-  let y = 800;
-  const margin = 50;
-  const lineHeight = 18;
+    let page = pdfDoc.addPage([595, 842]);
+    let y = 800;
+    const margin = 50;
+    const lineHeight = 18;
 
-  page.drawText('Récapitulatif - Fiche Fournisseur', {
-    x: margin, y, size: 16, font: boldFont, color: PDFLib.rgb(0.91, 0.32, 0.1)
-  });
-  y -= 30;
+    page.drawText('Récapitulatif - Fiche Fournisseur', {
+      x: margin, y, size: 16, font: boldFont, color: PDFLib.rgb(0.91, 0.32, 0.1)
+    });
+    y -= 30;
 
-  page.drawText(`Fichier: ${APP.uploadedFileName}`, {
-    x: margin, y, size: 10, font, color: PDFLib.rgb(0.4, 0.4, 0.4)
-  });
-  y -= 10;
-  page.drawText(`Date: ${new Date().toLocaleDateString('fr-FR')}`, {
-    x: margin, y, size: 10, font, color: PDFLib.rgb(0.4, 0.4, 0.4)
-  });
-  y -= 30;
+    page.drawText(`Fichier: ${APP.uploadedFileName}`, {
+      x: margin, y, size: 10, font, color: PDFLib.rgb(0.4, 0.4, 0.4)
+    });
+    y -= 10;
+    page.drawText(`Date: ${new Date().toLocaleDateString('fr-FR')}`, {
+      x: margin, y, size: 10, font, color: PDFLib.rgb(0.4, 0.4, 0.4)
+    });
+    y -= 30;
 
-  const allChamps = APP.analysisResult.champs || [];
-  allChamps.forEach((champ, idx) => {
-    if (y < 60) {
-      page = pdfDoc.addPage([595, 842]);
-      y = 800;
-    }
-    const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
-    const label = champ.label_original || champ.categorie_identifiee || 'Champ inconnu';
+    const allChamps = APP.analysisResult.champs || [];
+    allChamps.forEach((champ, idx) => {
+      if (y < 60) {
+        page = pdfDoc.addPage([595, 842]);
+        y = 800;
+      }
+      const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
+      const label = champ.label_original || champ.categorie_identifiee || 'Champ inconnu';
 
-    page.drawText(`${label}:`, { x: margin, y, size: 10, font: boldFont });
-    page.drawText(value, { x: margin + 200, y, size: 10, font });
-    y -= lineHeight;
-  });
+      page.drawText(`${label}:`, { x: margin, y, size: 10, font: boldFont });
+      page.drawText(value, { x: margin + 200, y, size: 10, font });
+      y -= lineHeight;
+    });
 
-  const pdfBytes = await pdfDoc.save();
-  downloadBlob(new Blob([pdfBytes], { type: 'application/pdf' }),
-    APP.uploadedFileName.replace(/\.[^.]+$/, '_recap.pdf'));
+    const pdfBytes = await pdfDoc.save();
+    downloadBlob(new Blob([pdfBytes], { type: 'application/pdf' }),
+      APP.uploadedFileName.replace(/\.[^.]+$/, '_recap.pdf'));
+  } catch(e) {
+    console.error('Erreur génération récap PDF:', e);
+    showToast('Erreur génération récap PDF: ' + e.message, 'error');
+  }
 }
 
 function downloadBlob(blob, filename) {

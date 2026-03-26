@@ -163,7 +163,7 @@ function getCompanyValue(category) {
   // Check champs_appris
   const appris = APP.companyData?.champs_appris || {};
   for (const [key, val] of Object.entries(appris)) {
-    if (cat.includes(key.toLowerCase()) && val && !val.startsWith('[')) {
+    if (cat.includes(key.toLowerCase()) && val && typeof val === 'string' && !val.startsWith('[')) {
       return val;
     }
   }
