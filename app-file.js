@@ -200,91 +200,79 @@ async function generateCompletedExcel() {
   if (!APP.fileContent || !APP.analysisResult) return;
 
   try {
-    // Load the original xlsx as a ZIP to preserve ALL formatting
     const zip = await JSZip.loadAsync(APP.fileContent);
 
-    // Collect all values to write: { sheetIndex: { cellRef: value } }
-    const cellUpdates = {};
+    // 1. Build sheet name → XML file path mapping from workbook.xml.rels + workbook.xml
+    const sheetMap = await buildSheetMap(zip);
+
+    // 2. Collect all values to write, grouped by sheet
+    // Format: { sheetXmlPath: { cellRef: value } }
+    const updatesBySheet = {};
+
     APP.analysisResult.champs.forEach((champ, idx) => {
-      const cellRef = (champ.cellule_ou_position || '').trim().toUpperCase();
-      if (!cellRef || !/^[A-Z]+\d+$/.test(cellRef)) return;
+      let raw = (champ.cellule_ou_position || '').trim();
+      if (!raw) return;
       const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
       if (!value) return;
-      // Default to sheet 1 (index 0) — most forms use the first sheet
-      if (!cellUpdates[0]) cellUpdates[0] = {};
-      cellUpdates[0][cellRef] = value;
-    });
 
-    // Find all sheet XML files in the zip
-    const sheetFiles = [];
-    zip.folder('xl/worksheets').forEach((path, file) => {
-      if (path.match(/^sheet\d+\.xml$/)) {
-        sheetFiles.push({ path: 'xl/worksheets/' + path, file });
+      let sheetName = null;
+      let cellRef = raw;
+
+      // Handle "SheetName!B11" or "'Sheet Name'!B11" format
+      if (raw.includes('!')) {
+        const parts = raw.split('!');
+        sheetName = parts[0].replace(/^'|'$/g, '');
+        cellRef = parts[1];
       }
+
+      // Handle range refs like "A33-A34" or "A33:A34" — use first cell
+      cellRef = cellRef.split(/[-:]/)[0].trim().toUpperCase();
+
+      if (!/^[A-Z]+\d+$/.test(cellRef)) return;
+
+      // Determine target XML path
+      let targetPath = null;
+      if (sheetName) {
+        targetPath = sheetMap.byName[sheetName.toLowerCase()];
+      }
+      if (!targetPath) {
+        // Default: write to ALL data sheets (skip known non-data sheets like "Menus")
+        // This ensures the cell is found wherever it is
+        for (const [name, path] of Object.entries(sheetMap.byName)) {
+          if (['menus', 'menu', 'listes', 'lists', 'paramètres', 'config'].includes(name)) continue;
+          if (!updatesBySheet[path]) updatesBySheet[path] = {};
+          updatesBySheet[path][cellRef] = value;
+        }
+        continue;
+      }
+
+      if (!updatesBySheet[targetPath]) updatesBySheet[targetPath] = {};
+      updatesBySheet[targetPath][cellRef] = value;
     });
-    sheetFiles.sort((a, b) => a.path.localeCompare(b.path));
 
-    // Also load shared strings table
-    let sstXml = null;
-    let sstEntries = [];
-    const sstFile = zip.file('xl/sharedStrings.xml');
-    if (sstFile) {
-      sstXml = await sstFile.async('string');
-      // Parse existing shared strings
-      const siMatches = sstXml.match(/<si>([\s\S]*?)<\/si>/g) || [];
-      sstEntries = siMatches.map(si => si);
-    }
+    // 3. Apply updates to each sheet XML
+    for (const [xmlPath, updates] of Object.entries(updatesBySheet)) {
+      const file = zip.file(xmlPath);
+      if (!file) continue;
 
-    // Process each sheet that has updates
-    for (const [sheetIdx, updates] of Object.entries(cellUpdates)) {
-      const idx = parseInt(sheetIdx);
-      if (idx >= sheetFiles.length) continue;
-
-      let sheetXml = await sheetFiles[idx].file.async('string');
+      let sheetXml = await file.async('string');
+      let modified = false;
 
       for (const [cellRef, value] of Object.entries(updates)) {
-        const col = cellRef.replace(/\d+/g, '');
         const row = parseInt(cellRef.replace(/[A-Z]+/g, ''));
-
-        // Try to find existing cell and update it
-        // Match <c r="B11" ...>...</c> or <c r="B11" ... />
-        const cellRegex = new RegExp(`(<c\\s[^>]*r="${cellRef}"[^>]*)(/>|>([\\s\\S]*?)</c>)`, 'i');
-        const cellMatch = sheetXml.match(cellRegex);
-
-        if (cellMatch) {
-          // Cell exists — update its value, change type to inlineStr
-          let cellTag = cellMatch[1];
-          // Remove existing type attribute and add t="inlineStr"
-          cellTag = cellTag.replace(/\s+t="[^"]*"/, '');
-          cellTag = cellTag.replace(/\s+s="(\d+)"/, ' s="$1"'); // keep style
-          const newCell = `${cellTag} t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
-          sheetXml = sheetXml.replace(cellRegex, newCell);
-        } else {
-          // Cell doesn't exist — need to insert it in the correct row
-          const rowRegex = new RegExp(`(<row\\s[^>]*r="${row}"[^>]*)(/>|>([\\s\\S]*?)</row>)`, 'i');
-          const rowMatch = sheetXml.match(rowRegex);
-
-          if (rowMatch) {
-            const newCellXml = `<c r="${cellRef}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
-            if (rowMatch[2] === '/>') {
-              // Empty row tag — open it and add cell
-              sheetXml = sheetXml.replace(rowRegex, `${rowMatch[1]}>${newCellXml}</row>`);
-            } else {
-              // Row has children — append cell before </row>
-              sheetXml = sheetXml.replace(rowRegex, `${rowMatch[1]}>${rowMatch[3]}${newCellXml}</row>`);
-            }
-          } else {
-            // Row doesn't exist — insert a new row in sheetData
-            const newRowXml = `<row r="${row}"><c r="${cellRef}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c></row>`;
-            sheetXml = sheetXml.replace('</sheetData>', `${newRowXml}</sheetData>`);
-          }
+        const result = updateCellInXml(sheetXml, cellRef, row, value);
+        if (result.changed) {
+          sheetXml = result.xml;
+          modified = true;
         }
       }
 
-      zip.file(sheetFiles[idx].path, sheetXml);
+      if (modified) {
+        zip.file(xmlPath, sheetXml);
+      }
     }
 
-    // Generate the modified zip
+    // 4. Generate the modified zip
     const blob = await zip.generateAsync({
       type: 'blob',
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -297,6 +285,97 @@ async function generateCompletedExcel() {
     console.error('Erreur génération Excel:', e);
     showToast('Erreur génération Excel: ' + e.message, 'error');
   }
+}
+
+// Build mapping: sheet name (lowercase) → xl/worksheets/sheetN.xml path
+async function buildSheetMap(zip) {
+  const map = { byName: {}, byIndex: [] };
+
+  try {
+    // Parse workbook.xml to get sheet names and rIds
+    const wbXml = await zip.file('xl/workbook.xml').async('string');
+    const sheetTags = wbXml.match(/<sheet\s[^>]*\/>/gi) || [];
+
+    // Parse relationships to map rId → file path
+    const relsFile = zip.file('xl/_rels/workbook.xml.rels');
+    const relsXml = relsFile ? await relsFile.async('string') : '';
+    const relMap = {};
+    const relMatches = relsXml.match(/<Relationship\s[^>]*\/>/gi) || [];
+    relMatches.forEach(rel => {
+      const id = (rel.match(/Id="([^"]+)"/) || [])[1];
+      const target = (rel.match(/Target="([^"]+)"/) || [])[1];
+      if (id && target) {
+        relMap[id] = target.startsWith('/') ? target.substring(1) : 'xl/' + target;
+      }
+    });
+
+    sheetTags.forEach(tag => {
+      const name = (tag.match(/name="([^"]+)"/) || [])[1];
+      const rId = (tag.match(/r:id="([^"]+)"/i) || [])[1];
+      if (name && rId && relMap[rId]) {
+        map.byName[name.toLowerCase()] = relMap[rId];
+        map.byIndex.push({ name, path: relMap[rId] });
+      }
+    });
+  } catch (e) {
+    // Fallback: enumerate sheet files directly
+    zip.folder('xl/worksheets').forEach((path) => {
+      if (path.match(/^sheet\d+\.xml$/)) {
+        const fullPath = 'xl/worksheets/' + path;
+        const idx = map.byIndex.length;
+        const name = `Sheet${idx + 1}`;
+        map.byName[name.toLowerCase()] = fullPath;
+        map.byIndex.push({ name, path: fullPath });
+      }
+    });
+  }
+
+  return map;
+}
+
+// Update a single cell in sheet XML, returns { xml, changed }
+function updateCellInXml(sheetXml, cellRef, row, value) {
+  const escapedValue = escapeXml(value);
+
+  // Try to find existing cell: <c r="B11" ...>...</c> or <c r="B11" .../>
+  const cellRegex = new RegExp(
+    `(<c\\s[^>]*?r="${cellRef}"[^>]*?)(\\s*/>|>([\\s\\S]*?)<\\/c>)`, 'i'
+  );
+  const cellMatch = sheetXml.match(cellRegex);
+
+  if (cellMatch) {
+    // Cell exists — replace content, keep style (s="N"), use inlineStr
+    let openTag = cellMatch[1];
+    // Remove old type attribute
+    openTag = openTag.replace(/\s+t="[^"]*"/g, '');
+    const newCell = `${openTag} t="inlineStr"><is><t>${escapedValue}</t></is></c>`;
+    return { xml: sheetXml.replace(cellRegex, newCell), changed: true };
+  }
+
+  // Cell doesn't exist — find the row and insert
+  const rowRegex = new RegExp(
+    `(<row\\s[^>]*?r="${row}"[^>]*?)(\\s*/>|>([\\s\\S]*?)<\\/row>)`, 'i'
+  );
+  const rowMatch = sheetXml.match(rowRegex);
+  const newCellXml = `<c r="${cellRef}" t="inlineStr"><is><t>${escapedValue}</t></is></c>`;
+
+  if (rowMatch) {
+    if (rowMatch[2].trim() === '/>') {
+      const newXml = sheetXml.replace(rowRegex, `${rowMatch[1]}>${newCellXml}</row>`);
+      return { xml: newXml, changed: true };
+    } else {
+      const newXml = sheetXml.replace(rowRegex,
+        `${rowMatch[1]}>${rowMatch[3]}${newCellXml}</row>`);
+      return { xml: newXml, changed: true };
+    }
+  }
+
+  // Row doesn't exist — insert before </sheetData>
+  const newRowXml = `<row r="${row}">${newCellXml}</row>`;
+  return {
+    xml: sheetXml.replace('</sheetData>', `${newRowXml}</sheetData>`),
+    changed: true
+  };
 }
 
 function escapeXml(str) {
