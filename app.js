@@ -233,16 +233,18 @@ function initButtons() {
   });
 
   document.getElementById('btnSaveDocDates').addEventListener('click', () => {
+    const docs = APP.companyData?.entites?.france?.documents_a_joindre;
+    if (!docs) return;
     document.querySelectorAll('.doc-date-field').forEach(input => {
       const key = input.dataset.docKey;
-      if (APP.companyData.documents_officiels[key]) {
-        APP.companyData.documents_officiels[key].derniere_mise_a_jour = input.value;
+      if (docs[key]) {
+        docs[key].date_obtention = input.value;
       }
     });
     document.querySelectorAll('.doc-expiry-field').forEach(input => {
       const key = input.dataset.docKey;
-      if (APP.companyData.documents_officiels[key]) {
-        APP.companyData.documents_officiels[key].date_expiration = input.value;
+      if (docs[key]) {
+        docs[key].date_validite = input.value;
       }
     });
     saveCompanyData();
