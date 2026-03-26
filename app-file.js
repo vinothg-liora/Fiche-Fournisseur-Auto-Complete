@@ -265,25 +265,16 @@ async function generateCompletedExcel() {
       console.log(`Sheet: ${xmlPath}`, updates);
     }
 
-    // 3. Apply updates to each sheet XML
+    // 3. Apply updates to each sheet XML using DOM parsing
     for (const [xmlPath, updates] of Object.entries(updatesBySheet)) {
       const file = zip.file(xmlPath);
-      if (!file) continue;
+      if (!file) { console.warn('Sheet file not found:', xmlPath); continue; }
 
-      let sheetXml = await file.async('string');
-      let modified = false;
+      const sheetXml = await file.async('string');
+      const updatedXml = updateSheetXmlDOM(sheetXml, updates);
 
-      for (const [cellRef, value] of Object.entries(updates)) {
-        const row = parseInt(cellRef.replace(/[A-Z]+/g, ''));
-        const result = updateCellInXml(sheetXml, cellRef, row, value);
-        if (result.changed) {
-          sheetXml = result.xml;
-          modified = true;
-        }
-      }
-
-      if (modified) {
-        zip.file(xmlPath, sheetXml);
+      if (updatedXml) {
+        zip.file(xmlPath, updatedXml);
       }
     }
 
@@ -355,53 +346,99 @@ async function buildSheetMap(zip) {
   return map;
 }
 
-// Update a single cell in sheet XML, returns { xml, changed }
-function updateCellInXml(sheetXml, cellRef, row, value) {
-  const escapedValue = escapeXml(value);
+// Update multiple cells in a sheet XML using DOM parsing (robust, no regex)
+function updateSheetXmlDOM(sheetXml, updates) {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(sheetXml, 'application/xml');
 
-  // Try to find existing cell — matches <c r="B11" ...>...</c> or <c r="B11" .../>
-  // The r= attribute can appear anywhere in the tag attributes
-  const cellRegex = new RegExp(
-    `(<c\\b[^>]*?\\br="${cellRef}"[^>]*?)(\\s*/>|>([\\s\\S]*?)<\\/c>)`,
-  );
-  const cellMatch = sheetXml.match(cellRegex);
-
-  if (cellMatch) {
-    // Cell exists — replace content, keep style (s="N"), use inlineStr
-    let openTag = cellMatch[1];
-    // Remove old type attribute if present
-    openTag = openTag.replace(/\s+t="[^"]*"/g, '');
-    const newCell = `${openTag} t="inlineStr"><is><t>${escapedValue}</t></is></c>`;
-    return { xml: sheetXml.replace(cellRegex, newCell), changed: true };
-  }
-
-  // Cell doesn't exist — find the row and insert
-  // Row tag: <row r="11" ...>...</row> — r= can be anywhere in attributes
-  const rowRegex = new RegExp(
-    `(<row\\b[^>]*?\\br="${row}"[^>]*?)(\\s*/>|>([\\s\\S]*?)<\\/row>)`,
-  );
-  const rowMatch = sheetXml.match(rowRegex);
-  const newCellXml = `<c r="${cellRef}" t="inlineStr"><is><t>${escapedValue}</t></is></c>`;
-
-  if (rowMatch) {
-    if (rowMatch[2].trim().startsWith('/>')) {
-      // Self-closing row — open it and add cell
-      const newXml = sheetXml.replace(rowRegex, `${rowMatch[1]}>${newCellXml}</row>`);
-      return { xml: newXml, changed: true };
-    } else {
-      // Row has children — append cell
-      const newXml = sheetXml.replace(rowRegex,
-        `${rowMatch[1]}>${rowMatch[3]}${newCellXml}</row>`);
-      return { xml: newXml, changed: true };
+    // Check for parse errors
+    if (doc.querySelector('parsererror')) {
+      console.error('XML parse error in sheet');
+      return null;
     }
-  }
 
-  // Row doesn't exist — insert before </sheetData>
-  const newRowXml = `<row r="${row}">${newCellXml}</row>`;
-  return {
-    xml: sheetXml.replace('</sheetData>', `${newRowXml}</sheetData>`),
-    changed: true
-  };
+    const sheetData = doc.querySelector('sheetData');
+    if (!sheetData) { console.error('No sheetData found'); return null; }
+
+    let changeCount = 0;
+
+    for (const [cellRef, value] of Object.entries(updates)) {
+      const rowNum = parseInt(cellRef.replace(/[A-Z]+/g, ''));
+      const colLetters = cellRef.replace(/\d+/g, '');
+
+      // Find or create the row
+      let rowEl = null;
+      const rows = sheetData.querySelectorAll('row');
+      for (const r of rows) {
+        if (r.getAttribute('r') === String(rowNum)) { rowEl = r; break; }
+      }
+
+      if (!rowEl) {
+        // Create row element
+        rowEl = doc.createElementNS(sheetData.namespaceURI, 'row');
+        rowEl.setAttribute('r', String(rowNum));
+        // Insert in correct position (sorted by row number)
+        let inserted = false;
+        for (const r of rows) {
+          if (parseInt(r.getAttribute('r')) > rowNum) {
+            sheetData.insertBefore(rowEl, r);
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted) sheetData.appendChild(rowEl);
+      }
+
+      // Find or create the cell
+      let cellEl = null;
+      const cells = rowEl.querySelectorAll('c');
+      for (const c of cells) {
+        if (c.getAttribute('r') === cellRef) { cellEl = c; break; }
+      }
+
+      if (!cellEl) {
+        // Create cell element
+        cellEl = doc.createElementNS(rowEl.namespaceURI, 'c');
+        cellEl.setAttribute('r', cellRef);
+        // Insert in correct column order
+        let inserted = false;
+        for (const c of cells) {
+          const existingCol = c.getAttribute('r').replace(/\d+/g, '');
+          if (colLetters < existingCol) {
+            rowEl.insertBefore(cellEl, c);
+            inserted = true;
+            break;
+          }
+        }
+        if (!inserted) rowEl.appendChild(cellEl);
+      }
+
+      // Clear existing content
+      while (cellEl.firstChild) cellEl.removeChild(cellEl.firstChild);
+
+      // Set type to inlineStr and write value (keeps existing style s="N")
+      cellEl.setAttribute('t', 'inlineStr');
+
+      const isEl = doc.createElementNS(cellEl.namespaceURI, 'is');
+      const tEl = doc.createElementNS(cellEl.namespaceURI, 't');
+      tEl.textContent = value;
+      isEl.appendChild(tEl);
+      cellEl.appendChild(isEl);
+
+      changeCount++;
+      console.log(`  Written: ${cellRef} = "${value}"`);
+    }
+
+    console.log(`Total cells written: ${changeCount}`);
+
+    // Serialize back to string
+    const serializer = new XMLSerializer();
+    return serializer.serializeToString(doc);
+  } catch (e) {
+    console.error('updateSheetXmlDOM error:', e);
+    return null;
+  }
 }
 
 // Generate completed .xls using XLSX.js (modifies workbook in memory, writes back as .xls)
