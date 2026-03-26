@@ -22,9 +22,19 @@ async function processFile(file) {
 
 async function processExcel(arrayBuffer, fileName) {
   APP.fileType = 'xlsx';
-  // Read with full style/format preservation — use a copy so original stays intact
+  const ext = fileName.split('.').pop().toLowerCase();
+
+  // Read the workbook
   const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true, cellFormula: true, cellDates: true });
   APP.workbook = workbook;
+
+  // For .xls files (old binary format), convert to .xlsx in memory for JSZip later
+  // JSZip needs a ZIP-based .xlsx, not a BIFF .xls
+  if (ext === 'xls') {
+    const xlsxData = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });
+    APP.fileContent = new Uint8Array(xlsxData);
+    APP.uploadedFileName = fileName.replace(/\.xls$/i, '.xlsx');
+  }
 
   // Extract data validation (dropdown) options per cell
   APP.dataValidations = {};
