@@ -37,7 +37,7 @@ const APP = {
   companyData: null,
   uploadedFile: null,
   uploadedFileName: '',
-  fileType: '', // 'xlsx', 'pdf-form', 'pdf-scan'
+  fileType: '', // 'xlsx', 'xls', 'pdf-form', 'pdf-scan'
   fileContent: null, // raw ArrayBuffer
   workbook: null, // for Excel
   analysisResult: null,
