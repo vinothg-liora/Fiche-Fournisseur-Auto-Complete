@@ -346,13 +346,13 @@ async function buildSheetMap(zip) {
   return map;
 }
 
-// Update multiple cells in a sheet XML using DOM parsing (robust, no regex)
+// Update multiple cells in a sheet XML using DOM parsing for logic,
+// then splice only <sheetData> back into original XML to avoid XMLSerializer corruption
 function updateSheetXmlDOM(sheetXml, updates) {
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(sheetXml, 'application/xml');
 
-    // Check for parse errors
     if (doc.querySelector('parsererror')) {
       console.error('XML parse error in sheet');
       return null;
@@ -375,10 +375,8 @@ function updateSheetXmlDOM(sheetXml, updates) {
       }
 
       if (!rowEl) {
-        // Create row element
         rowEl = doc.createElementNS(sheetData.namespaceURI, 'row');
         rowEl.setAttribute('r', String(rowNum));
-        // Insert in correct position (sorted by row number)
         let inserted = false;
         for (const r of rows) {
           if (parseInt(r.getAttribute('r')) > rowNum) {
@@ -398,10 +396,8 @@ function updateSheetXmlDOM(sheetXml, updates) {
       }
 
       if (!cellEl) {
-        // Create cell element
         cellEl = doc.createElementNS(rowEl.namespaceURI, 'c');
         cellEl.setAttribute('r', cellRef);
-        // Insert in correct column order
         let inserted = false;
         for (const c of cells) {
           const existingCol = c.getAttribute('r').replace(/\d+/g, '');
@@ -417,7 +413,7 @@ function updateSheetXmlDOM(sheetXml, updates) {
       // Clear existing content
       while (cellEl.firstChild) cellEl.removeChild(cellEl.firstChild);
 
-      // Set type to inlineStr and write value (keeps existing style s="N")
+      // Set type to inlineStr and write value
       cellEl.setAttribute('t', 'inlineStr');
 
       const isEl = doc.createElementNS(cellEl.namespaceURI, 'is');
@@ -432,9 +428,36 @@ function updateSheetXmlDOM(sheetXml, updates) {
 
     console.log(`Total cells written: ${changeCount}`);
 
-    // Serialize back to string
+    // Serialize ONLY the <sheetData> element, then splice it back into original XML
+    // This avoids XMLSerializer corrupting namespaces in the rest of the document
     const serializer = new XMLSerializer();
-    return serializer.serializeToString(doc);
+    let newSheetDataStr = serializer.serializeToString(sheetData);
+
+    // Remove redundant namespace declarations added by XMLSerializer
+    // e.g. xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    // Keep only the first one (on sheetData itself) if present, remove from children
+    const nsRegex = / xmlns="[^"]*"/g;
+    const nsMatches = newSheetDataStr.match(nsRegex) || [];
+    if (nsMatches.length > 1) {
+      // Keep first occurrence, remove the rest
+      let count = 0;
+      newSheetDataStr = newSheetDataStr.replace(nsRegex, (match) => {
+        count++;
+        return count === 1 ? match : '';
+      });
+    }
+
+    // Now replace <sheetData>...</sheetData> in the original XML
+    const sdStart = sheetXml.indexOf('<sheetData');
+    const sdEnd = sheetXml.indexOf('</sheetData>') + '</sheetData>'.length;
+
+    if (sdStart === -1 || sdEnd === -1) {
+      console.error('Could not find sheetData boundaries in original XML');
+      return null;
+    }
+
+    const result = sheetXml.substring(0, sdStart) + newSheetDataStr + sheetXml.substring(sdEnd);
+    return result;
   } catch (e) {
     console.error('updateSheetXmlDOM error:', e);
     return null;
