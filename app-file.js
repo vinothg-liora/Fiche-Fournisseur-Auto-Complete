@@ -346,118 +346,68 @@ async function buildSheetMap(zip) {
   return map;
 }
 
-// Update multiple cells in a sheet XML using DOM parsing for logic,
-// then splice only <sheetData> back into original XML to avoid XMLSerializer corruption
+// Pure string manipulation — no DOMParser, no XMLSerializer, no namespace issues
 function updateSheetXmlDOM(sheetXml, updates) {
   try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(sheetXml, 'application/xml');
-
-    if (doc.querySelector('parsererror')) {
-      console.error('XML parse error in sheet');
-      return null;
-    }
-
-    const sheetData = doc.querySelector('sheetData');
-    if (!sheetData) { console.error('No sheetData found'); return null; }
-
+    let xml = sheetXml;
     let changeCount = 0;
 
     for (const [cellRef, value] of Object.entries(updates)) {
-      const rowNum = parseInt(cellRef.replace(/[A-Z]+/g, ''));
-      const colLetters = cellRef.replace(/\d+/g, '');
+      const rowNum = cellRef.replace(/[A-Z]+/g, '');
+      const escaped = value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const newCellXml = `<c r="${cellRef}" t="inlineStr"><is><t>${escaped}</t></is></c>`;
 
-      // Find or create the row
-      let rowEl = null;
-      const rows = sheetData.querySelectorAll('row');
-      for (const r of rows) {
-        if (r.getAttribute('r') === String(rowNum)) { rowEl = r; break; }
+      // Step 1: Try to find and replace existing cell
+      // Match <c ...r="B11"...>...</c> or <c ...r="B11".../>
+      const cellWithContent = new RegExp(`<c\\b([^>]*\\br="${cellRef}"[^>]*)>([\\s\\S]*?)</c>`);
+      const cellSelfClose = new RegExp(`<c\\b([^>]*\\br="${cellRef}"[^>]*)/>`);
+
+      let matched = false;
+
+      if (cellWithContent.test(xml)) {
+        const m = xml.match(cellWithContent);
+        const styleMatch = m[1].match(/\bs="(\d+)"/);
+        const style = styleMatch ? ` s="${styleMatch[1]}"` : '';
+        xml = xml.replace(cellWithContent, `<c r="${cellRef}"${style} t="inlineStr"><is><t>${escaped}</t></is></c>`);
+        matched = true;
+      } else if (cellSelfClose.test(xml)) {
+        const m = xml.match(cellSelfClose);
+        const styleMatch = m[1].match(/\bs="(\d+)"/);
+        const style = styleMatch ? ` s="${styleMatch[1]}"` : '';
+        xml = xml.replace(cellSelfClose, `<c r="${cellRef}"${style} t="inlineStr"><is><t>${escaped}</t></is></c>`);
+        matched = true;
       }
 
-      if (!rowEl) {
-        rowEl = doc.createElementNS(sheetData.namespaceURI, 'row');
-        rowEl.setAttribute('r', String(rowNum));
-        let inserted = false;
-        for (const r of rows) {
-          if (parseInt(r.getAttribute('r')) > rowNum) {
-            sheetData.insertBefore(rowEl, r);
-            inserted = true;
-            break;
-          }
+      if (!matched) {
+        // Step 2: Cell doesn't exist — find row and append cell before </row>
+        const rowWithContent = new RegExp(`(<row\\b[^>]*\\br="${rowNum}"[^>]*>)([\\s\\S]*?)(</row>)`);
+        const rowSelfClose = new RegExp(`(<row\\b[^>]*\\br="${rowNum}"[^>]*)(/\\s*>)`);
+
+        if (rowWithContent.test(xml)) {
+          xml = xml.replace(rowWithContent, `$1$2${newCellXml}$3`);
+          matched = true;
+        } else if (rowSelfClose.test(xml)) {
+          xml = xml.replace(rowSelfClose, `$1>${newCellXml}</row>`);
+          matched = true;
         }
-        if (!inserted) sheetData.appendChild(rowEl);
       }
 
-      // Find or create the cell
-      let cellEl = null;
-      const cells = rowEl.querySelectorAll('c');
-      for (const c of cells) {
-        if (c.getAttribute('r') === cellRef) { cellEl = c; break; }
+      if (!matched) {
+        // Step 3: Row doesn't exist — add before </sheetData>
+        xml = xml.replace('</sheetData>', `<row r="${rowNum}">${newCellXml}</row></sheetData>`);
+        matched = true;
       }
 
-      if (!cellEl) {
-        cellEl = doc.createElementNS(rowEl.namespaceURI, 'c');
-        cellEl.setAttribute('r', cellRef);
-        let inserted = false;
-        for (const c of cells) {
-          const existingCol = c.getAttribute('r').replace(/\d+/g, '');
-          if (colLetters < existingCol) {
-            rowEl.insertBefore(cellEl, c);
-            inserted = true;
-            break;
-          }
-        }
-        if (!inserted) rowEl.appendChild(cellEl);
+      if (matched) {
+        changeCount++;
+        console.log(`  Written: ${cellRef} = "${value}"`);
+      } else {
+        console.warn(`  FAILED: ${cellRef}`);
       }
-
-      // Clear existing content
-      while (cellEl.firstChild) cellEl.removeChild(cellEl.firstChild);
-
-      // Set type to inlineStr and write value
-      cellEl.setAttribute('t', 'inlineStr');
-
-      const isEl = doc.createElementNS(cellEl.namespaceURI, 'is');
-      const tEl = doc.createElementNS(cellEl.namespaceURI, 't');
-      tEl.textContent = value;
-      isEl.appendChild(tEl);
-      cellEl.appendChild(isEl);
-
-      changeCount++;
-      console.log(`  Written: ${cellRef} = "${value}"`);
     }
 
     console.log(`Total cells written: ${changeCount}`);
-
-    // Serialize ONLY the <sheetData> element, then splice it back into original XML
-    // This avoids XMLSerializer corrupting namespaces in the rest of the document
-    const serializer = new XMLSerializer();
-    let newSheetDataStr = serializer.serializeToString(sheetData);
-
-    // Remove redundant namespace declarations added by XMLSerializer
-    // e.g. xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-    // Keep only the first one (on sheetData itself) if present, remove from children
-    const nsRegex = / xmlns="[^"]*"/g;
-    const nsMatches = newSheetDataStr.match(nsRegex) || [];
-    if (nsMatches.length > 1) {
-      // Keep first occurrence, remove the rest
-      let count = 0;
-      newSheetDataStr = newSheetDataStr.replace(nsRegex, (match) => {
-        count++;
-        return count === 1 ? match : '';
-      });
-    }
-
-    // Now replace <sheetData>...</sheetData> in the original XML
-    const sdStart = sheetXml.indexOf('<sheetData');
-    const sdEnd = sheetXml.indexOf('</sheetData>') + '</sheetData>'.length;
-
-    if (sdStart === -1 || sdEnd === -1) {
-      console.error('Could not find sheetData boundaries in original XML');
-      return null;
-    }
-
-    const result = sheetXml.substring(0, sdStart) + newSheetDataStr + sheetXml.substring(sdEnd);
-    return result;
+    return xml;
   } catch (e) {
     console.error('updateSheetXmlDOM error:', e);
     return null;
