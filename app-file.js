@@ -202,16 +202,28 @@ async function generateCompletedExcel() {
   if (!APP.workbook || !APP.analysisResult) return;
 
   try {
-    // Step 1: Write values using the official XLSX.js API
-    writeCellsToWorkbook();
+    // Build a fresh copy of the workbook to avoid any mutation issues
+    const freshData = XLSX.write(APP.workbook, { bookType: 'xlsx', type: 'array' });
+    const wb = XLSX.read(freshData, { type: 'array' });
 
-    // Step 2: Generate output
+    // Collect all updates
+    const updates = collectCellUpdates();
+    console.log('=== Cell updates to apply ===', updates);
+
+    // Apply updates to the fresh workbook
+    for (const { sheetName, cellRef, value } of updates) {
+      const sheet = wb.Sheets[sheetName];
+      if (!sheet) { console.warn('Sheet not found:', sheetName); continue; }
+      XLSX.utils.sheet_add_aoa(sheet, [[value]], { origin: cellRef });
+      console.log(`  Written: ${sheetName}!${cellRef} = "${sheet[cellRef]?.v}"`);
+    }
+
+    // Write the modified fresh workbook
     const bookType = APP.fileType === 'xls' ? 'xls' : 'xlsx';
     const mimeType = bookType === 'xls'
       ? 'application/vnd.ms-excel'
       : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-
-    const wbout = XLSX.write(APP.workbook, { bookType, type: 'array' });
+    const wbout = XLSX.write(wb, { bookType, type: 'array' });
     const outputBlob = new Blob([wbout], { type: mimeType });
 
     downloadBlob(outputBlob, APP.uploadedFileName.replace(/\.xlsx?$/i, `_complété.${bookType}`));
@@ -222,11 +234,10 @@ async function generateCompletedExcel() {
   }
 }
 
-// Write all field values using XLSX.utils.sheet_add_aoa (official API)
-function writeCellsToWorkbook() {
+// Collect all cell updates as a flat array
+function collectCellUpdates() {
+  const updates = [];
   const champs = APP.analysisResult.champs || [];
-  console.log('=== writeCellsToWorkbook ===');
-  console.log('Total champs:', champs.length);
 
   champs.forEach((champ, idx) => {
     let raw = (champ.cellule_ou_position || '').trim();
@@ -234,7 +245,6 @@ function writeCellsToWorkbook() {
     const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
     if (!value) return;
 
-    // Parse sheet name and cell ref
     let sheetName = null;
     let cellRef = raw;
     if (raw.includes('!')) {
@@ -245,30 +255,19 @@ function writeCellsToWorkbook() {
     cellRef = cellRef.split(/[-:]/)[0].trim().toUpperCase();
     if (!/^[A-Z]+\d+$/.test(cellRef)) return;
 
-    // Find target sheets
-    const targetSheets = [];
     if (sheetName) {
-      const found = APP.workbook.SheetNames.find(n => n.toLowerCase() === sheetName.toLowerCase());
-      if (found) targetSheets.push(found);
-    }
-    if (targetSheets.length === 0) {
+      updates.push({ sheetName, cellRef, value });
+    } else {
+      // Write to all data sheets
       APP.workbook.SheetNames.forEach(n => {
         if (!['menus', 'menu', 'listes', 'lists'].includes(n.toLowerCase())) {
-          targetSheets.push(n);
+          updates.push({ sheetName: n, cellRef, value });
         }
       });
     }
-
-    // Write using the official API
-    targetSheets.forEach(name => {
-      const sheet = APP.workbook.Sheets[name];
-      if (!sheet) return;
-      XLSX.utils.sheet_add_aoa(sheet, [[value]], { origin: cellRef });
-      // Verify it was written
-      const cell = sheet[cellRef];
-      console.log(`  ${name}!${cellRef} = "${cell?.v}" (type=${cell?.t})`);
-    });
   });
+
+  return updates;
 }
 
 // Restore formatting: copy styles/themes/images from original xlsx into new xlsx
