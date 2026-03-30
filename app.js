@@ -3,12 +3,18 @@
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadCompanyData();
+  await detectServer();
   renderDocuments();
   renderHistory();
   renderSettings();
   initTabs();
   initDropZone();
   initButtons();
+
+  // Show server status
+  if (SERVER_URL) {
+    document.getElementById('connectionStatus').textContent = '🟢 Serveur connecté';
+  }
 });
 
 /* ===== Tab Navigation ===== */
