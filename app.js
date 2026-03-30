@@ -216,10 +216,13 @@ function initButtons() {
   });
 
   document.getElementById('btnSaveApiKey').addEventListener('click', () => {
-    const key = document.getElementById('apiKeyInput').value.trim();
+    // Strip non-ASCII chars that copy-paste may add (BOM, smart quotes, etc.)
+    const key = document.getElementById('apiKeyInput').value.replace(/[^\x20-\x7E]/g, '').trim();
     if (key) {
       localStorage.setItem('anthropicApiKey', key);
-      showToast('Clé API sauvegardée.');
+      showToast('Cle API sauvegardee.');
+    } else {
+      showToast('Cle API vide ou invalide.', 'error');
     }
   });
 

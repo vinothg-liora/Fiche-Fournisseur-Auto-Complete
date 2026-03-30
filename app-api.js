@@ -41,9 +41,16 @@ Retourne UNIQUEMENT un JSON structuré ainsi :
 }`;
 
 async function analyzeWithClaude(fileContentBase64, fileName, fileType, textContent) {
-  const apiKey = localStorage.getItem('anthropicApiKey');
+  let apiKey = localStorage.getItem('anthropicApiKey');
   if (!apiKey) {
-    showToast('Clé API Anthropic non configurée. Allez dans Paramètres.', 'error');
+    showToast('Cle API Anthropic non configuree. Allez dans Parametres.', 'error');
+    return null;
+  }
+
+  // Strip any non-ASCII chars (BOM, invisible spaces, smart quotes from copy-paste)
+  apiKey = apiKey.replace(/[^\x20-\x7E]/g, '').trim();
+  if (!apiKey) {
+    showToast('Cle API invalide (caracteres non-ASCII detectes). Re-saisissez-la dans Parametres.', 'error');
     return null;
   }
 
@@ -117,7 +124,7 @@ async function analyzeWithClaude(fileContentBase64, fileName, fileType, textCont
       // Retry on overload (529) or rate limit (429)
       if ((response.status === 529 || response.status === 429) && attempt < maxRetries) {
         const delay = retryDelays[attempt];
-        showLoading(`API surchargée — nouvelle tentative dans ${delay / 1000}s (${attempt + 1}/${maxRetries})...`);
+        showLoading(`API surchargee - nouvelle tentative dans ${delay / 1000}s (${attempt + 1}/${maxRetries})...`);
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
