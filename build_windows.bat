@@ -32,19 +32,21 @@ if exist liora.ico (
 )
 
 echo  Build avec PyInstaller...
+REM Windows uses ; as path separator for --add-data
 pyinstaller ^
     --name "Liora-Fournisseur" ^
     --onefile ^
     --windowed ^
+    --noconfirm ^
     %ICON_FLAG% ^
     --add-data "index.html;." ^
     --add-data "style.css;." ^
-    --add-data "app-utils.js;." ^
-    --add-data "app-data.js;." ^
+    --add-data "app.js;." ^
     --add-data "app-api.js;." ^
+    --add-data "app-data.js;." ^
     --add-data "app-file.js;." ^
     --add-data "app-ui.js;." ^
-    --add-data "app.js;." ^
+    --add-data "app-utils.js;." ^
     --add-data "company_data.json;." ^
     --add-data "Liora_Logo_Orange_alpha.png;." ^
     --hidden-import=openpyxl ^
@@ -52,7 +54,9 @@ pyinstaller ^
     --hidden-import=reportlab ^
     --hidden-import=flask ^
     --hidden-import=flask_cors ^
+    --hidden-import=PIL ^
     --collect-submodules=reportlab ^
+    --collect-submodules=openpyxl ^
     server.py
 
 echo.

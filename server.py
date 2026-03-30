@@ -30,18 +30,25 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 def get_base_path():
     """Return the base path for bundled resources."""
     if getattr(sys, 'frozen', False):
+        # Running inside PyInstaller bundle
         return Path(sys._MEIPASS)
-    return Path(__file__).parent
+    # Running in dev — files are next to server.py
+    return Path(__file__).resolve().parent
 
 
 BASE_PATH = get_base_path()
+print(f"[startup] BASE_PATH = {BASE_PATH}")
+print(f"[startup] index.html exists = {(BASE_PATH / 'index.html').exists()}")
 
-app = Flask(__name__, static_folder=str(BASE_PATH), static_url_path='')
+app = Flask(__name__,
+            static_folder=str(BASE_PATH),
+            static_url_path='',
+            template_folder=str(BASE_PATH))
 CORS(app)
 
 
 # ---------------------------------------------------------------------------
-# Routes — Static files
+# Routes — Static files (serve ALL files from BASE_PATH)
 # ---------------------------------------------------------------------------
 
 @app.route('/')
@@ -51,7 +58,10 @@ def index():
 
 @app.route('/<path:filename>')
 def static_files(filename):
-    return send_from_directory(str(BASE_PATH), filename)
+    filepath = BASE_PATH / filename
+    if filepath.exists() and filepath.is_file():
+        return send_from_directory(str(BASE_PATH), filename)
+    return 'Not Found', 404
 
 
 # ---------------------------------------------------------------------------

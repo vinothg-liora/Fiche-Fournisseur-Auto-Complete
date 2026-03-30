@@ -38,27 +38,50 @@ else
 fi
 
 echo "🏗️ Build avec PyInstaller..."
+
+# List all web files to include
+WEB_FILES=(
+    index.html
+    style.css
+    app.js
+    app-api.js
+    app-data.js
+    app-file.js
+    app-ui.js
+    app-utils.js
+    company_data.json
+)
+
+# Build --add-data flags (macOS uses : as separator)
+ADD_DATA=""
+for f in "${WEB_FILES[@]}"; do
+    if [ -f "$f" ]; then
+        ADD_DATA="$ADD_DATA --add-data $f:."
+    else
+        echo "⚠️  Fichier manquant: $f"
+    fi
+done
+
+# Add logo if present
+if [ -f "Liora_Logo_Orange_alpha.png" ]; then
+    ADD_DATA="$ADD_DATA --add-data Liora_Logo_Orange_alpha.png:."
+fi
+
 pyinstaller \
     --name "Liora-Fournisseur" \
     --onefile \
     --windowed \
+    --noconfirm \
     $ICON_FLAG \
-    --add-data "index.html:." \
-    --add-data "style.css:." \
-    --add-data "app-utils.js:." \
-    --add-data "app-data.js:." \
-    --add-data "app-api.js:." \
-    --add-data "app-file.js:." \
-    --add-data "app-ui.js:." \
-    --add-data "app.js:." \
-    --add-data "company_data.json:." \
-    --add-data "Liora_Logo_Orange_alpha.png:." \
+    $ADD_DATA \
     --hidden-import=openpyxl \
     --hidden-import=pypdf \
     --hidden-import=reportlab \
     --hidden-import=flask \
     --hidden-import=flask_cors \
+    --hidden-import=PIL \
     --collect-submodules=reportlab \
+    --collect-submodules=openpyxl \
     server.py
 
 echo ""
