@@ -208,20 +208,24 @@ async function generateCompletedExcel() {
     // Step 2: Generate xlsx with XLSX.js (has data, may lose some formatting)
     const xlsxData = XLSX.write(APP.workbook, { bookType: 'xlsx', type: 'array' });
 
-    // Step 3: If we have the original file, restore formatting from it
-    // by copying styles/themes/images from original ZIP into the new ZIP
+    // Step 3: Create output blob
     let outputBlob;
-    if (APP.fileType === 'xlsx' && APP.fileContent) {
-      outputBlob = await restoreFormatting(xlsxData, APP.fileContent);
-    } else {
-      outputBlob = new Blob([xlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    }
-
     const ext = APP.fileType === 'xls' ? 'xls' : 'xlsx';
+
     if (APP.fileType === 'xls') {
-      // For .xls, write as xls directly
       const xlsData = XLSX.write(APP.workbook, { bookType: 'xls', type: 'array' });
       outputBlob = new Blob([xlsData], { type: 'application/vnd.ms-excel' });
+    } else {
+      // For .xlsx: first generate clean file with data, then restore formatting
+      outputBlob = new Blob([xlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      // Try to restore styles/images from original
+      if (APP.fileContent) {
+        try {
+          outputBlob = await restoreFormatting(xlsxData, APP.fileContent);
+        } catch (e) {
+          console.warn('Formatting restoration failed, using plain output:', e);
+        }
+      }
     }
 
     downloadBlob(outputBlob, APP.uploadedFileName.replace(/\.xlsx?$/i, `_complété.${ext}`));
@@ -269,14 +273,8 @@ function writeCellsToWorkbook() {
     targetSheets.forEach(name => {
       const sheet = APP.workbook.Sheets[name];
       if (!sheet) return;
-      const existing = sheet[cellRef];
-      if (existing) {
-        existing.v = value;
-        existing.t = 's';
-        delete existing.w;
-      } else {
-        sheet[cellRef] = { t: 's', v: value };
-      }
+      // Use type 'str' (string value) — NOT 's' (shared string index)
+      sheet[cellRef] = { v: value, t: 'str' };
       console.log(`  Written: ${name}!${cellRef} = "${value}"`);
     });
   });
@@ -288,11 +286,10 @@ async function restoreFormatting(newXlsxData, originalData) {
     const origZip = await JSZip.loadAsync(originalData);
     const newZip = await JSZip.loadAsync(newXlsxData);
 
-    // Files that contain formatting — copy from original to new
+    // ONLY copy visual formatting files — NOT sharedStrings.xml (contains cell data!)
     const formatFiles = [
       'xl/styles.xml',
       'xl/theme/theme1.xml',
-      'xl/sharedStrings.xml',
     ];
 
     // Copy all media files (images, logos)
