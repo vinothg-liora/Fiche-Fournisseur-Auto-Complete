@@ -1,15 +1,29 @@
 /* ===== File Processing ===== */
 
-// Server URL — auto-detected on page load
+// Server URL — derived from how the page was loaded
 let SERVER_URL = '';
 
 async function detectServer() {
-  for (const port of [5000, 5001, 5002, 5003, 5004]) {
+  // If the page is served by Flask, window.location.origin IS the server
+  if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+    const origin = window.location.origin; // e.g. http://127.0.0.1:5002
+    try {
+      const resp = await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(2000) });
+      if (resp.ok) {
+        SERVER_URL = origin;
+        console.log(`Server detected at ${SERVER_URL} (from window.location)`);
+        return true;
+      }
+    } catch (e) {}
+  }
+
+  // Fallback: scan common ports (for file:// or dev scenarios)
+  for (const port of [5000, 5001, 5002, 5003, 5004, 5005]) {
     try {
       const resp = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) });
       if (resp.ok) {
         SERVER_URL = `http://127.0.0.1:${port}`;
-        console.log(`Server detected at ${SERVER_URL}`);
+        console.log(`Server detected at ${SERVER_URL} (port scan)`);
         return true;
       }
     } catch (e) {}
