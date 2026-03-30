@@ -286,44 +286,44 @@ async function restoreFormatting(newXlsxData, originalData) {
     const origZip = await JSZip.loadAsync(originalData);
     const newZip = await JSZip.loadAsync(newXlsxData);
 
-    // ONLY copy visual formatting files — NOT sharedStrings.xml (contains cell data!)
-    const formatFiles = [
-      'xl/styles.xml',
-      'xl/theme/theme1.xml',
-    ];
-
-    // Copy all media files (images, logos)
-    origZip.folder('xl/media')?.forEach((path, file) => {
-      newZip.file('xl/media/' + path, file.async('uint8array'));
-    });
-
-    // Copy drawing files (charts, shapes)
-    origZip.folder('xl/drawings')?.forEach((path, file) => {
-      newZip.file('xl/drawings/' + path, file.async('uint8array'));
-    });
-
-    // Copy drawing rels
-    origZip.folder('xl/drawings/_rels')?.forEach((path, file) => {
-      newZip.file('xl/drawings/_rels/' + path, file.async('uint8array'));
-    });
-
-    // Copy worksheet rels (for images linked to sheets)
-    origZip.folder('xl/worksheets/_rels')?.forEach((path, file) => {
-      newZip.file('xl/worksheets/_rels/' + path, file.async('uint8array'));
-    });
-
-    // Copy format files
-    for (const f of formatFiles) {
+    // Copy styles and theme
+    for (const f of ['xl/styles.xml', 'xl/theme/theme1.xml']) {
       const origFile = origZip.file(f);
       if (origFile) {
         newZip.file(f, await origFile.async('uint8array'));
       }
     }
 
-    // Copy [Content_Types].xml from original (includes references to media)
-    const ct = origZip.file('[Content_Types].xml');
-    if (ct) {
-      newZip.file('[Content_Types].xml', await ct.async('string'));
+    // Copy media files (images, logos) — must await each one
+    const mediaFiles = [];
+    origZip.folder('xl/media')?.forEach((path) => { mediaFiles.push('xl/media/' + path); });
+    for (const path of mediaFiles) {
+      const f = origZip.file(path);
+      if (f) newZip.file(path, await f.async('uint8array'));
+    }
+
+    // Copy drawings
+    const drawingFiles = [];
+    origZip.folder('xl/drawings')?.forEach((path) => { drawingFiles.push('xl/drawings/' + path); });
+    for (const path of drawingFiles) {
+      const f = origZip.file(path);
+      if (f) newZip.file(path, await f.async('uint8array'));
+    }
+
+    // Copy drawing rels
+    const drawingRels = [];
+    origZip.folder('xl/drawings/_rels')?.forEach((path) => { drawingRels.push('xl/drawings/_rels/' + path); });
+    for (const path of drawingRels) {
+      const f = origZip.file(path);
+      if (f) newZip.file(path, await f.async('uint8array'));
+    }
+
+    // Copy worksheet rels (for images linked to sheets)
+    const wsRels = [];
+    origZip.folder('xl/worksheets/_rels')?.forEach((path) => { wsRels.push('xl/worksheets/_rels/' + path); });
+    for (const path of wsRels) {
+      const f = origZip.file(path);
+      if (f) newZip.file(path, await f.async('uint8array'));
     }
 
     return await newZip.generateAsync({
