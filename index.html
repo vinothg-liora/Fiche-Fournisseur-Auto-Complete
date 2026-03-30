@@ -113,6 +113,7 @@
       </div>
       <div class="actions">
         <button class="btn btn-primary" id="btnDownload">Télécharger le document complété</button>
+        <button class="btn btn-secondary" id="btnRecapPDF">Récapitulatif PDF</button>
         <button class="btn btn-secondary" id="btnEmailRecap">Récapitulatif email</button>
       </div>
     </div>
@@ -233,7 +234,7 @@
     <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px;">
       Copiez ce texte pour l'envoyer par email au client.
     </p>
-    <div class="email-recap" id="emailRecapContent"></div>
+    <div class="email-recap" id="emailRecapContent" style="white-space:normal;font-family:Arial,sans-serif;"></div>
     <div class="actions">
       <button class="btn btn-primary btn-sm" id="btnCopyEmail">Copier dans le presse-papiers</button>
       <button class="btn btn-secondary btn-sm" id="btnCloseEmailModal">Fermer</button>
@@ -252,11 +253,11 @@
 <script>
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 </script>
-<script src="app-utils.js?v=18"></script>
-<script src="app-data.js?v=18"></script>
-<script src="app-api.js?v=18"></script>
-<script src="app-file.js?v=18"></script>
-<script src="app-ui.js?v=18"></script>
-<script src="app.js?v=18"></script>
+<script src="app-utils.js?v=19"></script>
+<script src="app-data.js?v=19"></script>
+<script src="app-api.js?v=19"></script>
+<script src="app-file.js?v=19"></script>
+<script src="app-ui.js?v=19"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

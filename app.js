@@ -178,14 +178,26 @@ function initButtons() {
     else await generateRecapPDF();
   });
 
+  document.getElementById('btnRecapPDF').addEventListener('click', async () => {
+    await generateRecapPDF();
+  });
+
   document.getElementById('btnEmailRecap').addEventListener('click', () => {
     const recap = generateEmailRecap();
-    document.getElementById('emailRecapContent').textContent = recap;
+    document.getElementById('emailRecapContent').innerHTML = recap;
     document.getElementById('emailModal').classList.add('active');
   });
   document.getElementById('btnCopyEmail').addEventListener('click', () => {
-    const text = document.getElementById('emailRecapContent').textContent;
-    navigator.clipboard.writeText(text).then(() => showToast('Copié dans le presse-papiers !'));
+    // Copy as rich HTML for email paste
+    const el = document.getElementById('emailRecapContent');
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('copy');
+    sel.removeAllRanges();
+    showToast('Copié dans le presse-papiers (formaté) !');
   });
   document.getElementById('btnCloseEmailModal').addEventListener('click', () => {
     document.getElementById('emailModal').classList.remove('active');
