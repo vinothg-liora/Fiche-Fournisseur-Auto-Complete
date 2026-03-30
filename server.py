@@ -85,8 +85,18 @@ def fill_excel():
         if not file:
             return jsonify({'error': 'No file provided'}), 400
 
-        # Load workbook preserving everything
-        wb = load_workbook(file, keep_vba=True, data_only=False)
+        # Read the entire file into memory first (Flask stream can be incomplete)
+        file_bytes = file.read()
+        file_size = len(file_bytes)
+        original_name = file.filename or 'document.xlsx'
+        print(f"[fill-excel] Received: {original_name} ({file_size} bytes), {len(updates)} updates")
+
+        if file_size == 0:
+            return jsonify({'error': 'Empty file received'}), 400
+
+        # Load workbook from BytesIO (not directly from Flask stream)
+        file_buffer = io.BytesIO(file_bytes)
+        wb = load_workbook(file_buffer, keep_vba=True, data_only=False)
 
         filled_count = 0
         for u in updates:
@@ -123,18 +133,22 @@ def fill_excel():
         # Save to buffer
         output = io.BytesIO()
         wb.save(output)
+        output_size = output.tell()
         output.seek(0)
 
         # Determine filename
-        original_name = file.filename or 'document.xlsx'
         base, ext = os.path.splitext(original_name)
         if ext.lower() not in ('.xlsx', '.xlsm'):
             ext = '.xlsx'
-        out_name = f"{base}_complété{ext}"
+        out_name = f"{base}_complete{ext}"
 
-        print(f"[fill-excel] {filled_count} cells written → {out_name}")
-        return send_file(output, as_attachment=True, download_name=out_name,
-                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        print(f"[fill-excel] {filled_count} cells written, output={output_size} bytes -> {out_name}")
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=out_name,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
 
     except Exception as e:
         print(f"[fill-excel] ERROR: {e}")
