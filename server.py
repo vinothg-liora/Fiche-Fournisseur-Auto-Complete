@@ -16,12 +16,29 @@ from pathlib import Path
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 from openpyxl import load_workbook
+from openpyxl.utils import column_index_from_string
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.colors import HexColor
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+
+def get_writable_cell(ws, cell_ref):
+    """Return the writable cell for a given ref, handling merged cells.
+    If cell_ref falls inside a merged range, return the top-left cell instead."""
+    import re
+    m = re.match(r'^([A-Z]+)(\d+)$', cell_ref)
+    if not m:
+        return ws[cell_ref]
+    col = column_index_from_string(m.group(1))
+    row = int(m.group(2))
+    for merge_range in ws.merged_cells.ranges:
+        if (merge_range.min_row <= row <= merge_range.max_row and
+                merge_range.min_col <= col <= merge_range.max_col):
+            return ws.cell(merge_range.min_row, merge_range.min_col)
+    return ws.cell(row, col)
 
 # ---------------------------------------------------------------------------
 # Paths — works both in dev and inside PyInstaller bundle
@@ -127,7 +144,8 @@ def fill_excel():
 
             for sn in target_sheets:
                 ws = wb[sn]
-                ws[cell_ref] = value
+                cell = get_writable_cell(ws, cell_ref)
+                cell.value = value
                 filled_count += 1
 
         # Save to buffer
