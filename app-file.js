@@ -134,7 +134,8 @@ function arrayBufferToBase64(buffer) {
 function collectCellUpdates() {
   const updates = [];
   (APP.analysisResult.champs || []).forEach((champ, idx) => {
-    let raw = (champ.cellule_ou_position || '').trim();
+    // Prefer cellule_a_remplir (the empty target cell), fall back to cellule_ou_position
+    let raw = (champ.cellule_a_remplir || champ.cellule_ou_position || '').trim();
     if (!raw) return;
     const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
     if (!value) return;

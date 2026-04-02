@@ -25,20 +25,59 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 
-def get_writable_cell(ws, cell_ref):
-    """Return the writable cell for a given ref, handling merged cells.
-    If cell_ref falls inside a merged range, return the top-left cell instead."""
+def parse_cell_ref(cell_ref):
+    """Parse 'B11' into (col_index, row_index)."""
     import re
     m = re.match(r'^([A-Z]+)(\d+)$', cell_ref)
     if not m:
+        return None, None
+    return column_index_from_string(m.group(1)), int(m.group(2))
+
+
+def get_writable_cell(ws, cell_ref):
+    """Return the writable cell, handling merged cells.
+    If cell_ref is inside a merged range, return the top-left cell."""
+    col, row = parse_cell_ref(cell_ref)
+    if col is None:
         return ws[cell_ref]
-    col = column_index_from_string(m.group(1))
-    row = int(m.group(2))
     for merge_range in ws.merged_cells.ranges:
         if (merge_range.min_row <= row <= merge_range.max_row and
                 merge_range.min_col <= col <= merge_range.max_col):
             return ws.cell(merge_range.min_row, merge_range.min_col)
     return ws.cell(row, col)
+
+
+def find_empty_cell(ws, cell_ref):
+    """Find the best empty cell to write into.
+    If the target cell already has content, search adjacent cells.
+    Returns (cell, actual_ref) or (None, None) if no empty cell found."""
+    from openpyxl.utils import get_column_letter
+
+    col, row = parse_cell_ref(cell_ref)
+    if col is None:
+        return None, None
+
+    # First: check the target cell itself
+    target = get_writable_cell(ws, cell_ref)
+    if target.value is None or str(target.value).strip() == '':
+        return target, cell_ref
+
+    # Search order: right, below, left
+    search = [
+        (row, col + 1),  # right
+        (row + 1, col),  # below
+        (row, col - 1),  # left (if col > 1)
+    ]
+
+    for r, c in search:
+        if c < 1 or r < 1:
+            continue
+        ref = f"{get_column_letter(c)}{r}"
+        candidate = get_writable_cell(ws, ref)
+        if candidate.value is None or str(candidate.value).strip() == '':
+            return candidate, ref
+
+    return None, None
 
 # ---------------------------------------------------------------------------
 # Paths — works both in dev and inside PyInstaller bundle
@@ -146,9 +185,14 @@ def fill_excel():
 
             for sn in target_sheets:
                 ws = wb[sn]
-                cell = get_writable_cell(ws, cell_ref)
-                cell.value = value
-                filled_count += 1
+                cell, actual_ref = find_empty_cell(ws, cell_ref)
+                if cell is not None:
+                    cell.value = value
+                    filled_count += 1
+                    if actual_ref != cell_ref:
+                        print(f"  [REDIRECT] {cell_ref} occupied, wrote to {actual_ref}")
+                else:
+                    print(f"  [SKIP] {cell_ref} in {sn}: no empty cell found nearby, skipping")
 
         # Save to BytesIO buffer
         output = io.BytesIO()
