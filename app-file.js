@@ -134,10 +134,10 @@ function arrayBufferToBase64(buffer) {
 function collectCellUpdates() {
   const updates = [];
   (APP.analysisResult.champs || []).forEach((champ, idx) => {
-    // Prefer cellule_a_remplir (the empty target cell), fall back to cellule_ou_position
+    // Use cellule_a_remplir (new format) or cellule_ou_position (old format)
     let raw = (champ.cellule_a_remplir || champ.cellule_ou_position || '').trim();
     if (!raw) return;
-    const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_a_inserer ?? '';
+    const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_choisie_dans_liste ?? champ.valeur ?? champ.valeur_a_inserer ?? '';
     if (!value) return;
 
     let sheetName = null;

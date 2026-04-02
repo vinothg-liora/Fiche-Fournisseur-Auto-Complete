@@ -11,8 +11,18 @@ function renderVerificationTable(result) {
   tbody.innerHTML = '';
 
   (result.champs || []).forEach((champ, idx) => {
-    const knownValue = getCompanyValue(champ.categorie_identifiee);
-    const prefilledValue = knownValue || champ.valeur_a_inserer || '';
+    // Support both old and new JSON format from Claude
+    const label = champ.label || champ.label_original || '';
+    const categorie = champ.categorie || champ.categorie_identifiee || '';
+    const cellTarget = champ.cellule_a_remplir || champ.cellule_ou_position || '';
+    const cellLabel = champ.cellule_label || '';
+    const valeurClaude = champ.valeur || champ.valeur_a_inserer || '';
+    const isDropdown = champ.est_liste_deroulante === true;
+    const dropdownOptions = champ.options_liste || champ.options_menu || [];
+    const dropdownChoice = champ.valeur_choisie_dans_liste || '';
+
+    const knownValue = getCompanyValue(categorie);
+    const prefilledValue = knownValue || dropdownChoice || valeurClaude || '';
     APP.fieldValues[`field_${idx}`] = prefilledValue;
 
     const tr = document.createElement('tr');
@@ -20,36 +30,15 @@ function renderVerificationTable(result) {
     const hasRealValue = knownValue && knownValue.length > 0;
     const needsValidation = !hasRealValue;
 
-    // Determine input type from Claude's analysis
-    const menuOptions = champ.options_menu || [];
-    const typeSaisie = (champ.type_saisie || 'texte').toLowerCase();
-
-    // Build value input based on type
+    // Build value input — dropdown if list detected, else text
     let valueHtml;
-    if (menuOptions.length > 0 && needsValidation) {
-      // Dropdown / menu déroulant
+    if ((isDropdown || dropdownOptions.length > 0) && needsValidation) {
       valueHtml = `<select class="field-input field-select" id="input_field_${idx}"
                      data-field-idx="${idx}" data-needs-validation="${needsValidation}">
-                     <option value="">— Sélectionner —</option>
-                     ${menuOptions.map(opt => `<option value="${escapeHtml(opt)}" ${opt === prefilledValue ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
+                     <option value="">-- Selectionner --</option>
+                     ${dropdownOptions.map(opt => `<option value="${escapeHtml(opt)}" ${opt === prefilledValue ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
                    </select>`;
-    } else if ((typeSaisie === 'checkbox' || typeSaisie === 'oui_non') && needsValidation) {
-      // Checkbox / Oui-Non
-      valueHtml = `<select class="field-input field-select" id="input_field_${idx}"
-                     data-field-idx="${idx}" data-needs-validation="${needsValidation}">
-                     <option value="">— Sélectionner —</option>
-                     <option value="Oui" ${prefilledValue === 'Oui' ? 'selected' : ''}>Oui</option>
-                     <option value="Non" ${prefilledValue === 'Non' ? 'selected' : ''}>Non</option>
-                   </select>`;
-    } else if (typeSaisie === 'date' && needsValidation) {
-      // Date field
-      valueHtml = `<input type="date" class="field-input"
-                     id="input_field_${idx}"
-                     value="${escapeHtml(prefilledValue)}"
-                     data-field-idx="${idx}"
-                     data-needs-validation="${needsValidation}">`;
     } else {
-      // Default text input
       valueHtml = `<input type="text" class="field-input ${needsValidation ? '' : 'validated'}"
                      id="input_field_${idx}"
                      value="${escapeHtml(prefilledValue)}"
@@ -59,15 +48,15 @@ function renderVerificationTable(result) {
     }
 
     tr.innerHTML = `
-      <td title="${escapeHtml(champ.justification || '')}">${escapeHtml(champ.label_original)}</td>
-      <td><code>${escapeHtml(champ.cellule_ou_position)}</code></td>
-      <td>${escapeHtml(champ.categorie_identifiee)}</td>
+      <td title="${escapeHtml(cellLabel ? 'Label: ' + cellLabel : '')}">${escapeHtml(label)}</td>
+      <td><code>${escapeHtml(cellTarget)}</code></td>
+      <td>${escapeHtml(categorie)}</td>
       <td><span class="confidence-badge ${confClass}">${champ.confiance}</span></td>
       <td>${valueHtml}</td>
       <td>
         ${needsValidation ?
-          `<button class="btn btn-sm btn-secondary" onclick="validateField(${idx})">✓ Valider</button>` :
-          `<span style="color:var(--green)">✓</span>`
+          `<button class="btn btn-sm btn-secondary" onclick="validateField(${idx})">&#10003; Valider</button>` :
+          `<span style="color:var(--green)">&#10003;</span>`
         }
       </td>
     `;

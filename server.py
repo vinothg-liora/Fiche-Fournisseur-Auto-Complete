@@ -157,42 +157,54 @@ def fill_excel():
         wb = load_workbook(file_buffer, keep_vba=is_macro, data_only=False)
 
         filled_count = 0
+        skipped_count = 0
         for u in updates:
             sheet_name = u.get('sheetName', '')
             cell_ref = u.get('cellRef', '')
             value = u.get('value', '')
+            valid_options = u.get('validOptions')  # list of valid dropdown values
 
             if not cell_ref or not value:
                 continue
 
-            # Find the sheet
+            # Find the target sheet(s)
             target_sheets = []
             if sheet_name:
-                # Try exact match
                 if sheet_name in wb.sheetnames:
                     target_sheets.append(sheet_name)
                 else:
-                    # Case-insensitive match
                     for sn in wb.sheetnames:
                         if sn.lower() == sheet_name.lower():
                             target_sheets.append(sn)
                             break
 
             if not target_sheets:
-                # Write to all non-menu sheets
                 skip = {'menus', 'menu', 'listes', 'lists', 'config'}
                 target_sheets = [sn for sn in wb.sheetnames if sn.lower() not in skip]
 
             for sn in target_sheets:
                 ws = wb[sn]
-                cell, actual_ref = find_empty_cell(ws, cell_ref)
-                if cell is not None:
-                    cell.value = value
-                    filled_count += 1
-                    if actual_ref != cell_ref:
-                        print(f"  [REDIRECT] {cell_ref} occupied, wrote to {actual_ref}")
-                else:
-                    print(f"  [SKIP] {cell_ref} in {sn}: no empty cell found nearby, skipping")
+
+                # Validate dropdown value if options provided
+                if valid_options and isinstance(valid_options, list) and len(valid_options) > 0:
+                    if value not in valid_options:
+                        print(f"  [WARN] {cell_ref} in {sn}: '{value}' not in valid options {valid_options}, writing anyway")
+
+                # Get the writable cell (handles merged cells)
+                cell = get_writable_cell(ws, cell_ref)
+
+                # Safety: never overwrite existing content
+                if cell.value is not None and str(cell.value).strip() != '':
+                    print(f"  [SKIP] {cell_ref} in {sn}: cell not empty (contains '{str(cell.value)[:40]}'), skipping")
+                    skipped_count += 1
+                    continue
+
+                cell.value = value
+                filled_count += 1
+                print(f"  [OK] {sn}!{cell_ref} = '{value[:50]}'")
+
+        if skipped_count > 0:
+            print(f"[fill-excel] WARNING: {skipped_count} cells skipped (not empty)")
 
         # Save to BytesIO buffer
         output = io.BytesIO()
