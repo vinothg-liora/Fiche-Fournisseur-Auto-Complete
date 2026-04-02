@@ -134,11 +134,13 @@ function arrayBufferToBase64(buffer) {
 function collectCellUpdates() {
   const updates = [];
   (APP.analysisResult.champs || []).forEach((champ, idx) => {
-    // Use cellule_a_remplir (new format) or cellule_ou_position (old format)
-    let raw = (champ.cellule_a_remplir || champ.cellule_ou_position || '').trim();
+    // Always use cellule_a_remplir (the empty target), fallbacks for compat
+    let raw = (champ.cellule_a_remplir || champ.cellule_ou_position || champ.position || '').trim();
     if (!raw) return;
-    const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_choisie_dans_liste ?? champ.valeur ?? champ.valeur_a_inserer ?? '';
+    const value = APP.fieldValues[`field_${idx}`] ?? champ.valeur_choisie ?? champ.valeur ?? champ.valeur_a_inserer ?? '';
     if (!value) return;
+    // Pass valid options to server for dropdown validation
+    const validOptions = champ.options_disponibles || champ.options_liste || null;
 
     let sheetName = null;
     let cellRef = raw;
@@ -151,11 +153,11 @@ function collectCellUpdates() {
     if (!/^[A-Z]+\d+$/.test(cellRef)) return;
 
     if (sheetName) {
-      updates.push({ sheetName, cellRef, value });
+      updates.push({ sheetName, cellRef, value, validOptions });
     } else {
       APP.workbook.SheetNames.forEach(n => {
         if (!['menus', 'menu', 'listes', 'lists'].includes(n.toLowerCase())) {
-          updates.push({ sheetName: n, cellRef, value });
+          updates.push({ sheetName: n, cellRef, value, validOptions });
         }
       });
     }

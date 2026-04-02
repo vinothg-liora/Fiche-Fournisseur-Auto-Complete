@@ -11,34 +11,36 @@ function renderVerificationTable(result) {
   tbody.innerHTML = '';
 
   (result.champs || []).forEach((champ, idx) => {
-    // Support both old and new JSON format from Claude
+    // Unified field extraction — supports all JSON formats
     const label = champ.label || champ.label_original || '';
     const categorie = champ.categorie || champ.categorie_identifiee || '';
-    const cellTarget = champ.cellule_a_remplir || champ.cellule_ou_position || '';
+    const cellTarget = champ.cellule_a_remplir || champ.cellule_ou_position || champ.position || '';
     const cellLabel = champ.cellule_label || '';
-    const valeurClaude = champ.valeur || champ.valeur_a_inserer || '';
-    const isDropdown = champ.est_liste_deroulante === true;
-    const dropdownOptions = champ.options_liste || champ.options_menu || [];
-    const dropdownChoice = champ.valeur_choisie_dans_liste || '';
+    const valeurClaude = champ.valeur_choisie || champ.valeur || champ.valeur_a_inserer || '';
+    const hasChoices = champ.est_choix_multiple === true || champ.est_liste_deroulante === true;
+    const choiceOptions = champ.options_disponibles || champ.options_liste || champ.options_menu || [];
 
     const knownValue = getCompanyValue(categorie);
-    const prefilledValue = knownValue || dropdownChoice || valeurClaude || '';
+    const prefilledValue = knownValue || valeurClaude || '';
     APP.fieldValues[`field_${idx}`] = prefilledValue;
 
     const tr = document.createElement('tr');
     const confClass = `confidence-${champ.confiance}`;
     const hasRealValue = knownValue && knownValue.length > 0;
-    const needsValidation = !hasRealValue;
+    // Low confidence always requires manual validation
+    const needsValidation = !hasRealValue || champ.confiance === 'basse';
 
-    // Build value input — dropdown if list detected, else text
+    // Build value input
     let valueHtml;
-    if ((isDropdown || dropdownOptions.length > 0) && needsValidation) {
+    if ((hasChoices || choiceOptions.length > 0) && needsValidation) {
+      // Dropdown with options from the original document
       valueHtml = `<select class="field-input field-select" id="input_field_${idx}"
                      data-field-idx="${idx}" data-needs-validation="${needsValidation}">
                      <option value="">-- Selectionner --</option>
-                     ${dropdownOptions.map(opt => `<option value="${escapeHtml(opt)}" ${opt === prefilledValue ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
+                     ${choiceOptions.map(opt => `<option value="${escapeHtml(opt)}" ${opt === prefilledValue ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
                    </select>`;
     } else {
+      // Text input
       valueHtml = `<input type="text" class="field-input ${needsValidation ? '' : 'validated'}"
                      id="input_field_${idx}"
                      value="${escapeHtml(prefilledValue)}"
@@ -48,7 +50,7 @@ function renderVerificationTable(result) {
     }
 
     tr.innerHTML = `
-      <td title="${escapeHtml(cellLabel ? 'Label: ' + cellLabel : '')}">${escapeHtml(label)}</td>
+      <td title="${escapeHtml(champ.justification || (cellLabel ? 'Label: ' + cellLabel : ''))}">${escapeHtml(label)}</td>
       <td><code>${escapeHtml(cellTarget)}</code></td>
       <td>${escapeHtml(categorie)}</td>
       <td><span class="confidence-badge ${confClass}">${champ.confiance}</span></td>
