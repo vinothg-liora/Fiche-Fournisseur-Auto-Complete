@@ -113,7 +113,9 @@ def fill_excel():
 
         # Load workbook from BytesIO (not directly from Flask stream)
         file_buffer = io.BytesIO(file_bytes)
-        wb = load_workbook(file_buffer, keep_vba=True, data_only=False)
+        # Only keep_vba for macro-enabled files (.xlsm), not regular .xlsx
+        is_macro = original_name.lower().endswith('.xlsm')
+        wb = load_workbook(file_buffer, keep_vba=is_macro, data_only=False)
 
         filled_count = 0
         for u in updates:
@@ -148,24 +150,33 @@ def fill_excel():
                 cell.value = value
                 filled_count += 1
 
-        # Save to buffer
+        # Save to BytesIO buffer
         output = io.BytesIO()
         wb.save(output)
+        wb.close()
         output_size = output.tell()
         output.seek(0)
 
-        # Determine filename
+        if output_size == 0:
+            return jsonify({'error': 'Generated file is empty'}), 500
+
+        # Determine filename and mimetype
         base, ext = os.path.splitext(original_name)
-        if ext.lower() not in ('.xlsx', '.xlsm'):
+        if is_macro:
+            ext = '.xlsm'
+            mime = 'application/vnd.ms-excel.sheet.macroEnabled.12'
+        else:
             ext = '.xlsx'
+            mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         out_name = f"{base}_complete{ext}"
 
         print(f"[fill-excel] {filled_count} cells written, output={output_size} bytes -> {out_name}")
+
         return send_file(
             output,
+            mimetype=mime,
             as_attachment=True,
-            download_name=out_name,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            download_name=out_name
         )
 
     except Exception as e:
