@@ -149,8 +149,14 @@ def extract_all_dropdowns(wb):
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
         if not hasattr(ws, 'data_validations') or not ws.data_validations:
+            print(f"[dropdown] Sheet '{sheet_name}': no data validations")
             continue
-        for dv in ws.data_validations.dataValidation:
+
+        dvs = ws.data_validations.dataValidation
+        print(f"[dropdown] Sheet '{sheet_name}': {len(dvs)} validation(s) found")
+
+        for dv in dvs:
+            print(f"[dropdown]   type={dv.type} formula1={dv.formula1} sqref={dv.sqref}")
             if dv.type != 'list' or not dv.formula1:
                 continue
 
