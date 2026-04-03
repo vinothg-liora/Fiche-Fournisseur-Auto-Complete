@@ -11,36 +11,40 @@ function renderVerificationTable(result) {
   tbody.innerHTML = '';
 
   (result.champs || []).forEach((champ, idx) => {
-    // Unified field extraction — supports all JSON formats
+    if (!champ || typeof champ !== 'object') return; // skip malformed entries
+
+    // Unified field extraction — all properties have safe defaults
     const label = champ.label || champ.label_original || '';
     const categorie = champ.categorie || champ.categorie_identifiee || '';
     const cellTarget = champ.cellule_a_remplir || champ.cellule_ou_position || champ.position || '';
     const cellLabel = champ.cellule_label || '';
     const valeurClaude = champ.valeur_choisie || champ.valeur || champ.valeur_a_inserer || '';
+    const confiance = champ.confiance || 'basse';
+    const justification = champ.justification || '';
     const hasChoices = champ.est_choix_multiple === true || champ.est_liste_deroulante === true;
-    const choiceOptions = champ.options_disponibles || champ.options_liste || champ.options_menu || [];
+    const choiceOptions = Array.isArray(champ.options_disponibles) ? champ.options_disponibles
+                        : Array.isArray(champ.options_liste) ? champ.options_liste
+                        : Array.isArray(champ.options_menu) ? champ.options_menu
+                        : [];
 
     const knownValue = getCompanyValue(categorie);
     const prefilledValue = knownValue || valeurClaude || '';
     APP.fieldValues[`field_${idx}`] = prefilledValue;
 
     const tr = document.createElement('tr');
-    const confClass = `confidence-${champ.confiance}`;
+    const confClass = `confidence-${confiance}`;
     const hasRealValue = knownValue && knownValue.length > 0;
-    // Low confidence always requires manual validation
-    const needsValidation = !hasRealValue || champ.confiance === 'basse';
+    const needsValidation = !hasRealValue || confiance === 'basse';
 
     // Build value input
     let valueHtml;
     if ((hasChoices || choiceOptions.length > 0) && needsValidation) {
-      // Dropdown with options from the original document
       valueHtml = `<select class="field-input field-select" id="input_field_${idx}"
                      data-field-idx="${idx}" data-needs-validation="${needsValidation}">
                      <option value="">-- Selectionner --</option>
-                     ${choiceOptions.map(opt => `<option value="${escapeHtml(opt)}" ${opt === prefilledValue ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
+                     ${choiceOptions.map(opt => `<option value="${escapeHtml(String(opt))}" ${String(opt) === prefilledValue ? 'selected' : ''}>${escapeHtml(String(opt))}</option>`).join('')}
                    </select>`;
     } else {
-      // Text input
       valueHtml = `<input type="text" class="field-input ${needsValidation ? '' : 'validated'}"
                      id="input_field_${idx}"
                      value="${escapeHtml(prefilledValue)}"
@@ -49,11 +53,12 @@ function renderVerificationTable(result) {
                      ${!needsValidation ? 'readonly' : ''}>`;
     }
 
+    const tooltipText = justification || (cellLabel ? 'Label: ' + cellLabel : '');
     tr.innerHTML = `
-      <td title="${escapeHtml(champ.justification || (cellLabel ? 'Label: ' + cellLabel : ''))}">${escapeHtml(label)}</td>
+      <td title="${escapeHtml(tooltipText)}">${escapeHtml(label)}</td>
       <td><code>${escapeHtml(cellTarget)}</code></td>
       <td>${escapeHtml(categorie)}</td>
-      <td><span class="confidence-badge ${confClass}">${champ.confiance}</span></td>
+      <td><span class="confidence-badge ${confClass}">${escapeHtml(confiance)}</span></td>
       <td>${valueHtml}</td>
       <td>
         ${needsValidation ?
@@ -73,11 +78,15 @@ function renderVerificationTable(result) {
   if (unknownFields.length > 0) {
     unknownSection.style.display = 'block';
     unknownFields.forEach((u, idx) => {
+      if (!u || typeof u !== 'object') return;
+      const uLabel = u.label || u.label_original || '';
+      const uPos = u.position || '';
+      const uDesc = u.description || '';
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${escapeHtml(u.label_original)}</td>
-        <td><code>${escapeHtml(u.position)}</code></td>
-        <td>${escapeHtml(u.description || '—')}</td>
+        <td>${escapeHtml(uLabel)}</td>
+        <td><code>${escapeHtml(uPos)}</code></td>
+        <td>${escapeHtml(uDesc || '--')}</td>
         <td>
           <input type="text" class="field-input" id="input_unknown_${idx}"
                  data-unknown-idx="${idx}" data-needs-validation="true"

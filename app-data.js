@@ -149,6 +149,7 @@ async function saveCompanyData() {
 function getCompanyValue(category) {
   const fr = getFR();
   if (!fr) return '';
+  if (!category || typeof category !== 'string') return '';
   const cat = category.toLowerCase().trim();
 
   // Check learned aliases first
