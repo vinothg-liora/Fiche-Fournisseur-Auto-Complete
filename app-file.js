@@ -57,6 +57,22 @@ async function processExcel(arrayBuffer, fileName) {
   const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
   APP.workbook = workbook;
 
+  // Extract dropdown options from the server (openpyxl reads data validations)
+  APP.dropdownOptions = {};
+  if (SERVER_URL && APP.uploadedFile) {
+    try {
+      const fd = new FormData();
+      fd.append('file', APP.uploadedFile);
+      const resp = await fetch(`${SERVER_URL}/api/extract-dropdowns`, { method: 'POST', body: fd });
+      if (resp.ok) {
+        APP.dropdownOptions = await resp.json();
+        console.log('Dropdown options extracted:', Object.keys(APP.dropdownOptions).length, 'cells');
+      }
+    } catch (e) {
+      console.warn('Could not extract dropdowns:', e.message);
+    }
+  }
+
   let textContent = '';
   workbook.SheetNames.forEach(name => {
     if (name.toLowerCase() === 'menus') return;
@@ -68,7 +84,12 @@ async function processExcel(arrayBuffer, fileName) {
       for (let c = range.s.c; c <= range.e.c; c++) {
         const addr = XLSX.utils.encode_cell({ r, c });
         const cell = sheet[addr];
-        row.push(cell ? String(cell.v ?? '') : '');
+        let cellText = cell ? String(cell.v ?? '') : '';
+        // Append dropdown info for Claude to see
+        if (APP.dropdownOptions[addr]) {
+          cellText += ` [MENU DEROULANT: ${APP.dropdownOptions[addr].join(', ')}]`;
+        }
+        row.push(cellText);
       }
       const rowStr = row.join(' | ');
       if (rowStr.trim()) textContent += `Ligne ${r + 1}: ${rowStr}\n`;

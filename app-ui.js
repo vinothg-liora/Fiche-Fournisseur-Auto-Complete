@@ -21,11 +21,17 @@ function renderVerificationTable(result) {
     const valeurClaude = champ.valeur_choisie || champ.valeur || champ.valeur_a_inserer || '';
     const confiance = champ.confiance || 'basse';
     const justification = champ.justification || '';
-    const hasChoices = champ.est_choix_multiple === true || champ.est_liste_deroulante === true;
-    const choiceOptions = Array.isArray(champ.options_disponibles) ? champ.options_disponibles
-                        : Array.isArray(champ.options_liste) ? champ.options_liste
-                        : Array.isArray(champ.options_menu) ? champ.options_menu
-                        : [];
+    // Merge dropdown options: from Claude's analysis + from server's openpyxl extraction
+    let choiceOptions = Array.isArray(champ.options_disponibles) ? champ.options_disponibles
+                      : Array.isArray(champ.options_liste) ? champ.options_liste
+                      : Array.isArray(champ.options_menu) ? champ.options_menu
+                      : [];
+    // If Claude didn't find options, check server-extracted dropdowns for this cell
+    if (choiceOptions.length === 0 && APP.dropdownOptions && cellTarget) {
+      const serverOpts = APP.dropdownOptions[cellTarget] || APP.dropdownOptions[cellTarget.replace('$', '')] || [];
+      if (serverOpts.length > 0) choiceOptions = serverOpts;
+    }
+    const hasChoices = champ.est_choix_multiple === true || champ.est_liste_deroulante === true || choiceOptions.length > 0;
 
     const knownValue = getCompanyValue(categorie);
     const prefilledValue = knownValue || valeurClaude || '';

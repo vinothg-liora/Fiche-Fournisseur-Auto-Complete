@@ -121,6 +121,92 @@ def static_files(filename):
 
 
 # ---------------------------------------------------------------------------
+# Route — Extract dropdown options from Excel
+# ---------------------------------------------------------------------------
+
+@app.route('/api/extract-dropdowns', methods=['POST'])
+def extract_dropdowns():
+    """
+    Receives an Excel file, returns all data validation dropdown options.
+    Returns JSON: { "B25": ["Option1", "Option2"], "B30": ["A", "B"] }
+    """
+    try:
+        file = request.files.get('file')
+        if not file:
+            return jsonify({}), 200
+
+        file_bytes = file.read()
+        if len(file_bytes) == 0:
+            return jsonify({}), 200
+
+        wb = load_workbook(io.BytesIO(file_bytes), data_only=False)
+        all_options = {}
+
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            if not hasattr(ws, 'data_validations') or not ws.data_validations:
+                continue
+
+            for dv in ws.data_validations.dataValidation:
+                if dv.type != 'list' or not dv.formula1:
+                    continue
+
+                # Extract options from formula
+                options = []
+                formula = dv.formula1
+
+                if formula.startswith('"'):
+                    # Inline list: "Option1,Option2,Option3"
+                    options = [o.strip() for o in formula.strip('"').split(',')]
+                elif '!' in formula:
+                    # Range reference: Menus!$A$1:$A$10
+                    try:
+                        ref_sheet, ref_range = formula.split('!')
+                        ref_sheet = ref_sheet.strip("'")
+                        if ref_sheet in wb.sheetnames:
+                            ref_ws = wb[ref_sheet]
+                            for row in ref_ws[ref_range.replace('$', '')]:
+                                for cell in row:
+                                    if cell.value is not None:
+                                        options.append(str(cell.value))
+                    except Exception as e:
+                        print(f"  [dropdown] Error reading range {formula}: {e}")
+                else:
+                    # Simple range in same sheet: $A$1:$A$10
+                    try:
+                        for row in ws[formula.replace('$', '')]:
+                            for cell in row:
+                                if cell.value is not None:
+                                    options.append(str(cell.value))
+                    except Exception as e:
+                        print(f"  [dropdown] Error reading local range {formula}: {e}")
+
+                if not options:
+                    continue
+
+                # Map options to all cells in the sqref
+                for cell_range in str(dv.sqref).split():
+                    if ':' in cell_range:
+                        try:
+                            for row in ws[cell_range]:
+                                for cell in row:
+                                    ref = cell.coordinate
+                                    all_options[ref] = options
+                        except Exception:
+                            pass
+                    else:
+                        all_options[cell_range.replace('$', '')] = options
+
+        wb.close()
+        print(f"[extract-dropdowns] Found {len(all_options)} cells with dropdown options")
+        return jsonify(all_options)
+
+    except Exception as e:
+        print(f"[extract-dropdowns] ERROR: {e}")
+        return jsonify({}), 200
+
+
+# ---------------------------------------------------------------------------
 # Route — Fill Excel (.xlsx / .xls)
 # ---------------------------------------------------------------------------
 
