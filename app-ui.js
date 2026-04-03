@@ -21,15 +21,22 @@ function renderVerificationTable(result) {
     const valeurClaude = champ.valeur_choisie || champ.valeur || champ.valeur_a_inserer || '';
     const confiance = champ.confiance || 'basse';
     const justification = champ.justification || '';
-    // Merge dropdown options: from Claude's analysis + from server's openpyxl extraction
+    // Merge dropdown options: from Claude + from server's openpyxl extraction
     let choiceOptions = Array.isArray(champ.options_disponibles) ? champ.options_disponibles
                       : Array.isArray(champ.options_liste) ? champ.options_liste
                       : Array.isArray(champ.options_menu) ? champ.options_menu
                       : [];
-    // If Claude didn't find options, check server-extracted dropdowns for this cell
+    // If Claude didn't find options, check server-extracted dropdowns
     if (choiceOptions.length === 0 && APP.dropdownOptions && cellTarget) {
-      const serverOpts = APP.dropdownOptions[cellTarget] || APP.dropdownOptions[cellTarget.replace('$', '')] || [];
-      if (serverOpts.length > 0) choiceOptions = serverOpts;
+      // Try exact match, then without sheet prefix, then without $
+      const cleanRef = cellTarget.replace(/.*!/, '').replace(/\$/g, '').toUpperCase();
+      const serverOpts = APP.dropdownOptions[cellTarget]
+                      || APP.dropdownOptions[cleanRef]
+                      || [];
+      if (serverOpts.length > 0) {
+        choiceOptions = serverOpts;
+        console.log(`  Dropdown from server for ${cellTarget}: ${serverOpts.length} options`);
+      }
     }
     const hasChoices = champ.est_choix_multiple === true || champ.est_liste_deroulante === true || choiceOptions.length > 0;
 

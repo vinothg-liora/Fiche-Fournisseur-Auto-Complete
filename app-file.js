@@ -66,7 +66,7 @@ async function processExcel(arrayBuffer, fileName) {
       const resp = await fetch(`${SERVER_URL}/api/extract-dropdowns`, { method: 'POST', body: fd });
       if (resp.ok) {
         APP.dropdownOptions = await resp.json();
-        console.log('Dropdown options extracted:', Object.keys(APP.dropdownOptions).length, 'cells');
+        console.log('Dropdown options extracted:', JSON.stringify(APP.dropdownOptions));
       }
     } catch (e) {
       console.warn('Could not extract dropdowns:', e.message);
