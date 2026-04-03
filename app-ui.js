@@ -42,21 +42,22 @@ function renderVerificationTable(result) {
     const hasRealValue = knownValue && knownValue.length > 0;
     const needsValidation = !hasRealValue || confiance === 'basse';
 
-    // Build value input
+    // Build value input — ALL fields are editable
     let valueHtml;
-    if ((hasChoices || choiceOptions.length > 0) && needsValidation) {
+    if (hasChoices || choiceOptions.length > 0) {
+      // Dropdown with options — always editable, preselect value
       valueHtml = `<select class="field-input field-select" id="input_field_${idx}"
                      data-field-idx="${idx}" data-needs-validation="${needsValidation}">
                      <option value="">-- Selectionner --</option>
                      ${choiceOptions.map(opt => `<option value="${escapeHtml(String(opt))}" ${String(opt) === prefilledValue ? 'selected' : ''}>${escapeHtml(String(opt))}</option>`).join('')}
                    </select>`;
     } else {
-      valueHtml = `<input type="text" class="field-input ${needsValidation ? '' : 'validated'}"
+      // Text input — always editable, green border if pre-filled
+      valueHtml = `<input type="text" class="field-input ${hasRealValue ? 'validated' : ''}"
                      id="input_field_${idx}"
                      value="${escapeHtml(prefilledValue)}"
                      data-field-idx="${idx}"
-                     data-needs-validation="${needsValidation}"
-                     ${!needsValidation ? 'readonly' : ''}>`;
+                     data-needs-validation="${needsValidation}">`;
     }
 
     const tooltipText = justification || (cellLabel ? 'Label: ' + cellLabel : '');
