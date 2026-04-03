@@ -110,34 +110,39 @@ def get_dropdown_options(ws, cell_ref):
         if dv.type != 'list' or not dv.formula1:
             continue
 
-        formula = dv.formula1
+        formula = dv.formula1.strip('"').strip("'")
+        wb = ws.parent
 
-        if formula.startswith('"'):
-            # Inline list: "Option1,Option2,Option3"
-            options = [o.strip() for o in formula.strip('"').split(',')]
+        # Option 1: inline list with commas "OUI,NON"
+        if ',' in formula and '!' not in formula and formula not in wb.defined_names:
+            options = [o.strip() for o in formula.split(',')]
+        # Option 2: range in another sheet Menus!$A$1:$A$10
         elif '!' in formula:
-            # Range in another sheet: Menus!$A$1:$A$10
             try:
                 sheet_name, range_ref = formula.split('!')
                 sheet_name = sheet_name.strip("'")
-                ref_ws = ws.parent[sheet_name]
-                clean_range = range_ref.replace('$', '')
-                for row in ref_ws[clean_range]:
-                    for c in row:
-                        if c.value is not None:
-                            options.append(str(c.value))
+                ref_ws = wb[sheet_name]
+                options = [str(c.value) for row in ref_ws[range_ref.replace('$', '')] for c in row if c.value is not None]
             except Exception as e:
-                print(f"  [dropdown] Error reading {formula}: {e}")
-        else:
-            # Range in same sheet: $A$1:$A$10
+                print(f"  [dropdown] Error reading range {formula}: {e}")
+        # Option 3: Named Range (e.g. OUI_NON)
+        elif formula in wb.defined_names:
             try:
-                clean_range = formula.replace('$', '')
-                for row in ws[clean_range]:
-                    for c in row:
-                        if c.value is not None:
-                            options.append(str(c.value))
+                named_range = wb.defined_names[formula]
+                for sheet_title, coord in named_range.destinations:
+                    ref_ws = wb[sheet_title]
+                    options = [str(c.value) for row in ref_ws[coord.replace('$', '')] for c in row if c.value is not None]
+                    if options:
+                        break
+                print(f"  [dropdown] Named range '{formula}' resolved: {options}")
             except Exception as e:
-                print(f"  [dropdown] Error reading {formula}: {e}")
+                print(f"  [dropdown] Error reading named range {formula}: {e}")
+        # Option 4: simple range in same sheet $A$1:$A$10
+        else:
+            try:
+                options = [str(c.value) for row in ws[formula.replace('$', '')] for c in row if c.value is not None]
+            except Exception as e:
+                print(f"  [dropdown] Error reading local range {formula}: {e}")
         break
 
     return options
@@ -160,29 +165,38 @@ def extract_all_dropdowns(wb):
             if dv.type != 'list' or not dv.formula1:
                 continue
 
-            formula = dv.formula1
+            formula = dv.formula1.strip('"').strip("'")
             options = []
 
-            if formula.startswith('"'):
-                options = [o.strip() for o in formula.strip('"').split(',')]
+            # Inline list with commas
+            if ',' in formula and '!' not in formula and formula not in wb.defined_names:
+                options = [o.strip() for o in formula.split(',')]
+            # Range in another sheet
             elif '!' in formula:
                 try:
                     ref_sheet, ref_range = formula.split('!')
                     ref_sheet = ref_sheet.strip("'")
                     if ref_sheet in wb.sheetnames:
                         ref_ws = wb[ref_sheet]
-                        for row in ref_ws[ref_range.replace('$', '')]:
-                            for c in row:
-                                if c.value is not None:
-                                    options.append(str(c.value))
+                        options = [str(c.value) for row in ref_ws[ref_range.replace('$', '')] for c in row if c.value is not None]
                 except Exception as e:
                     print(f"  [dropdown] Error: {e}")
+            # Named Range
+            elif formula in wb.defined_names:
+                try:
+                    named_range = wb.defined_names[formula]
+                    for sheet_title, coord in named_range.destinations:
+                        ref_ws = wb[sheet_title]
+                        options = [str(c.value) for row in ref_ws[coord.replace('$', '')] for c in row if c.value is not None]
+                        if options:
+                            break
+                    print(f"  [dropdown] Named range '{formula}': {options}")
+                except Exception as e:
+                    print(f"  [dropdown] Named range error: {e}")
+            # Simple range in same sheet
             else:
                 try:
-                    for row in ws[formula.replace('$', '')]:
-                        for c in row:
-                            if c.value is not None:
-                                options.append(str(c.value))
+                    options = [str(c.value) for row in ws[formula.replace('$', '')] for c in row if c.value is not None]
                 except Exception as e:
                     print(f"  [dropdown] Error: {e}")
 
