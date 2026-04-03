@@ -243,7 +243,6 @@ def fill_excel():
         wb = load_workbook(file_buffer, keep_vba=is_macro, data_only=False)
 
         filled_count = 0
-        skipped_count = 0
         for u in updates:
             sheet_name = u.get('sheetName', '')
             cell_ref = u.get('cellRef', '')
@@ -274,23 +273,21 @@ def fill_excel():
                 # Validate dropdown value if options provided
                 if valid_options and isinstance(valid_options, list) and len(valid_options) > 0:
                     if value not in valid_options:
-                        print(f"  [WARN] {cell_ref} in {sn}: '{value}' not in valid options {valid_options}, writing anyway")
+                        print(f"  [WARN] {cell_ref} in {sn}: '{value}' not in valid options, writing anyway")
 
                 # Get the writable cell (handles merged cells)
                 cell = get_writable_cell(ws, cell_ref)
 
-                # Safety: never overwrite existing content
-                if cell.value is not None and str(cell.value).strip() != '':
-                    print(f"  [SKIP] {cell_ref} in {sn}: cell not empty (contains '{str(cell.value)[:40]}'), skipping")
-                    skipped_count += 1
-                    continue
+                # Log what was there before
+                old_val = cell.value
+                if old_val is not None and str(old_val).strip() != '':
+                    print(f"  [OVERWRITE] {sn}!{cell_ref}: '{str(old_val)[:30]}' -> '{value[:50]}'")
+                else:
+                    print(f"  [OK] {sn}!{cell_ref} = '{value[:50]}'")
 
+                # Write the value — trust Claude's cell identification
                 cell.value = value
                 filled_count += 1
-                print(f"  [OK] {sn}!{cell_ref} = '{value[:50]}'")
-
-        if skipped_count > 0:
-            print(f"[fill-excel] WARNING: {skipped_count} cells skipped (not empty)")
 
         # Save to BytesIO buffer
         output = io.BytesIO()
