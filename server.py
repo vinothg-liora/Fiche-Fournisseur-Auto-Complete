@@ -6,6 +6,7 @@ Serveur Flask local (packagé avec PyInstaller)
 import io
 import json
 import os
+import re
 import socket
 import sys
 import threading
@@ -16,7 +17,7 @@ from pathlib import Path
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 from openpyxl import load_workbook
-from openpyxl.utils import column_index_from_string
+from openpyxl.utils import column_index_from_string, get_column_letter
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.colors import HexColor
@@ -25,70 +26,13 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 
-def parse_cell_ref(cell_ref):
-    """Parse 'B11' into (col_index, row_index)."""
-    import re
-    m = re.match(r'^([A-Z]+)(\d+)$', cell_ref)
-    if not m:
-        return None, None
-    return column_index_from_string(m.group(1)), int(m.group(2))
-
-
-def get_writable_cell(ws, cell_ref):
-    """Return the writable cell, handling merged cells.
-    If cell_ref is inside a merged range, return the top-left cell."""
-    col, row = parse_cell_ref(cell_ref)
-    if col is None:
-        return ws[cell_ref]
-    for merge_range in ws.merged_cells.ranges:
-        if (merge_range.min_row <= row <= merge_range.max_row and
-                merge_range.min_col <= col <= merge_range.max_col):
-            return ws.cell(merge_range.min_row, merge_range.min_col)
-    return ws.cell(row, col)
-
-
-def find_empty_cell(ws, cell_ref):
-    """Find the best empty cell to write into.
-    If the target cell already has content, search adjacent cells.
-    Returns (cell, actual_ref) or (None, None) if no empty cell found."""
-    from openpyxl.utils import get_column_letter
-
-    col, row = parse_cell_ref(cell_ref)
-    if col is None:
-        return None, None
-
-    # First: check the target cell itself
-    target = get_writable_cell(ws, cell_ref)
-    if target.value is None or str(target.value).strip() == '':
-        return target, cell_ref
-
-    # Search order: right, below, left
-    search = [
-        (row, col + 1),  # right
-        (row + 1, col),  # below
-        (row, col - 1),  # left (if col > 1)
-    ]
-
-    for r, c in search:
-        if c < 1 or r < 1:
-            continue
-        ref = f"{get_column_letter(c)}{r}"
-        candidate = get_writable_cell(ws, ref)
-        if candidate.value is None or str(candidate.value).strip() == '':
-            return candidate, ref
-
-    return None, None
-
 # ---------------------------------------------------------------------------
-# Paths — works both in dev and inside PyInstaller bundle
+# Paths
 # ---------------------------------------------------------------------------
 
 def get_base_path():
-    """Return the base path for bundled resources."""
     if getattr(sys, 'frozen', False):
-        # Running inside PyInstaller bundle
         return Path(sys._MEIPASS)
-    # Running in dev — files are next to server.py
     return Path(__file__).resolve().parent
 
 
@@ -104,7 +48,157 @@ CORS(app)
 
 
 # ---------------------------------------------------------------------------
-# Routes — Static files (serve ALL files from BASE_PATH)
+# Excel helpers
+# ---------------------------------------------------------------------------
+
+def parse_cell_ref(cell_ref):
+    """Parse 'B11' into (col_index, row_index). Returns (None, None) on failure."""
+    m = re.match(r'^([A-Z]+)(\d+)$', cell_ref.upper())
+    if not m:
+        return None, None
+    return column_index_from_string(m.group(1)), int(m.group(2))
+
+
+def get_writable_cell(ws, row, col):
+    """Return the writable cell, redirecting to merge master if needed."""
+    for merge_range in ws.merged_cells.ranges:
+        if (merge_range.min_row <= row <= merge_range.max_row and
+                merge_range.min_col <= col <= merge_range.max_col):
+            return ws.cell(merge_range.min_row, merge_range.min_col)
+    return ws.cell(row, col)
+
+
+def find_target_cell(ws, row, col):
+    """Find the best empty cell to write into.
+    Rule 1: target cell itself if empty
+    Rule 2: search right (up to 10 cols)
+    Rule 3: search below (up to 5 rows)
+    Rule 4: no empty cell found -> return None
+    """
+    # Rule 1: target cell
+    cell = get_writable_cell(ws, row, col)
+    if cell.value is None or str(cell.value).strip() == '':
+        return cell
+
+    # Rule 2: search right
+    for c in range(col + 1, col + 10):
+        candidate = get_writable_cell(ws, row, c)
+        if candidate.value is None or str(candidate.value).strip() == '':
+            return candidate
+
+    # Rule 3: search below
+    for r in range(row + 1, row + 5):
+        candidate = get_writable_cell(ws, r, col)
+        if candidate.value is None or str(candidate.value).strip() == '':
+            return candidate
+
+    # Rule 4: no empty cell
+    ref = f"{get_column_letter(col)}{row}"
+    print(f"  [WARNING] No empty cell found near {ref}")
+    return None
+
+
+def get_dropdown_options(ws, cell_ref):
+    """Read data validation dropdown options for a specific cell."""
+    options = []
+    if not hasattr(ws, 'data_validations') or not ws.data_validations:
+        return options
+
+    for dv in ws.data_validations.dataValidation:
+        if cell_ref not in str(dv.sqref):
+            continue
+        if dv.type != 'list' or not dv.formula1:
+            continue
+
+        formula = dv.formula1
+
+        if formula.startswith('"'):
+            # Inline list: "Option1,Option2,Option3"
+            options = [o.strip() for o in formula.strip('"').split(',')]
+        elif '!' in formula:
+            # Range in another sheet: Menus!$A$1:$A$10
+            try:
+                sheet_name, range_ref = formula.split('!')
+                sheet_name = sheet_name.strip("'")
+                ref_ws = ws.parent[sheet_name]
+                clean_range = range_ref.replace('$', '')
+                for row in ref_ws[clean_range]:
+                    for c in row:
+                        if c.value is not None:
+                            options.append(str(c.value))
+            except Exception as e:
+                print(f"  [dropdown] Error reading {formula}: {e}")
+        else:
+            # Range in same sheet: $A$1:$A$10
+            try:
+                clean_range = formula.replace('$', '')
+                for row in ws[clean_range]:
+                    for c in row:
+                        if c.value is not None:
+                            options.append(str(c.value))
+            except Exception as e:
+                print(f"  [dropdown] Error reading {formula}: {e}")
+        break
+
+    return options
+
+
+def extract_all_dropdowns(wb):
+    """Extract all dropdown options from all sheets. Returns {cellRef: [options]}."""
+    all_options = {}
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+        if not hasattr(ws, 'data_validations') or not ws.data_validations:
+            continue
+        for dv in ws.data_validations.dataValidation:
+            if dv.type != 'list' or not dv.formula1:
+                continue
+
+            formula = dv.formula1
+            options = []
+
+            if formula.startswith('"'):
+                options = [o.strip() for o in formula.strip('"').split(',')]
+            elif '!' in formula:
+                try:
+                    ref_sheet, ref_range = formula.split('!')
+                    ref_sheet = ref_sheet.strip("'")
+                    if ref_sheet in wb.sheetnames:
+                        ref_ws = wb[ref_sheet]
+                        for row in ref_ws[ref_range.replace('$', '')]:
+                            for c in row:
+                                if c.value is not None:
+                                    options.append(str(c.value))
+                except Exception as e:
+                    print(f"  [dropdown] Error: {e}")
+            else:
+                try:
+                    for row in ws[formula.replace('$', '')]:
+                        for c in row:
+                            if c.value is not None:
+                                options.append(str(c.value))
+                except Exception as e:
+                    print(f"  [dropdown] Error: {e}")
+
+            if not options:
+                continue
+
+            for cell_range in str(dv.sqref).split():
+                if ':' in cell_range:
+                    try:
+                        for row in ws[cell_range.replace('$', '')]:
+                            for c in row:
+                                all_options[c.coordinate] = options
+                    except Exception:
+                        pass
+                else:
+                    all_options[cell_range.replace('$', '')] = options
+
+    return all_options
+
+
+# ---------------------------------------------------------------------------
+# Routes — Static files
 # ---------------------------------------------------------------------------
 
 @app.route('/')
@@ -121,85 +215,31 @@ def static_files(filename):
 
 
 # ---------------------------------------------------------------------------
-# Route — Extract dropdown options from Excel
+# Route — Extract dropdown options
 # ---------------------------------------------------------------------------
 
 @app.route('/api/extract-dropdowns', methods=['POST'])
-def extract_dropdowns():
-    """
-    Receives an Excel file, returns all data validation dropdown options.
-    Returns JSON: { "B25": ["Option1", "Option2"], "B30": ["A", "B"] }
-    """
+def api_extract_dropdowns():
     try:
         file = request.files.get('file')
         if not file:
             return jsonify({}), 200
 
         file_bytes = file.read()
+        print(f"[extract-dropdowns] {file.filename} ({len(file_bytes)} bytes)")
+
         if len(file_bytes) == 0:
             return jsonify({}), 200
 
         wb = load_workbook(io.BytesIO(file_bytes), data_only=False)
-        all_options = {}
-
-        for sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
-            if not hasattr(ws, 'data_validations') or not ws.data_validations:
-                continue
-
-            for dv in ws.data_validations.dataValidation:
-                if dv.type != 'list' or not dv.formula1:
-                    continue
-
-                # Extract options from formula
-                options = []
-                formula = dv.formula1
-
-                if formula.startswith('"'):
-                    # Inline list: "Option1,Option2,Option3"
-                    options = [o.strip() for o in formula.strip('"').split(',')]
-                elif '!' in formula:
-                    # Range reference: Menus!$A$1:$A$10
-                    try:
-                        ref_sheet, ref_range = formula.split('!')
-                        ref_sheet = ref_sheet.strip("'")
-                        if ref_sheet in wb.sheetnames:
-                            ref_ws = wb[ref_sheet]
-                            for row in ref_ws[ref_range.replace('$', '')]:
-                                for cell in row:
-                                    if cell.value is not None:
-                                        options.append(str(cell.value))
-                    except Exception as e:
-                        print(f"  [dropdown] Error reading range {formula}: {e}")
-                else:
-                    # Simple range in same sheet: $A$1:$A$10
-                    try:
-                        for row in ws[formula.replace('$', '')]:
-                            for cell in row:
-                                if cell.value is not None:
-                                    options.append(str(cell.value))
-                    except Exception as e:
-                        print(f"  [dropdown] Error reading local range {formula}: {e}")
-
-                if not options:
-                    continue
-
-                # Map options to all cells in the sqref
-                for cell_range in str(dv.sqref).split():
-                    if ':' in cell_range:
-                        try:
-                            for row in ws[cell_range]:
-                                for cell in row:
-                                    ref = cell.coordinate
-                                    all_options[ref] = options
-                        except Exception:
-                            pass
-                    else:
-                        all_options[cell_range.replace('$', '')] = options
-
+        result = extract_all_dropdowns(wb)
         wb.close()
-        print(f"[extract-dropdowns] Found {len(all_options)} cells with dropdown options")
-        return jsonify(all_options)
+
+        print(f"[extract-dropdowns] Found {len(result)} cells with dropdown options")
+        for ref, opts in list(result.items())[:5]:
+            print(f"  {ref}: {opts[:3]}{'...' if len(opts) > 3 else ''}")
+
+        return jsonify(result)
 
     except Exception as e:
         print(f"[extract-dropdowns] ERROR: {e}")
@@ -207,18 +247,11 @@ def extract_dropdowns():
 
 
 # ---------------------------------------------------------------------------
-# Route — Fill Excel (.xlsx / .xls)
+# Route — Fill Excel
 # ---------------------------------------------------------------------------
 
 @app.route('/api/fill-excel', methods=['POST'])
 def fill_excel():
-    """
-    Receives:
-      - file: the original Excel file (multipart)
-      - updates: JSON string — array of {sheetName, cellRef, value}
-    Returns:
-      - The modified Excel file (download)
-    """
     try:
         file = request.files.get('file')
         updates_json = request.form.get('updates', '[]')
@@ -227,32 +260,32 @@ def fill_excel():
         if not file:
             return jsonify({'error': 'No file provided'}), 400
 
-        # Read the entire file into memory first (Flask stream can be incomplete)
         file_bytes = file.read()
-        file_size = len(file_bytes)
         original_name = file.filename or 'document.xlsx'
-        print(f"[fill-excel] Received: {original_name} ({file_size} bytes), {len(updates)} updates")
+        print(f"[fill-excel] Received: {original_name} ({len(file_bytes)} bytes), {len(updates)} updates")
 
-        if file_size == 0:
+        if len(file_bytes) == 0:
             return jsonify({'error': 'Empty file received'}), 400
 
-        # Load workbook from BytesIO (not directly from Flask stream)
-        file_buffer = io.BytesIO(file_bytes)
-        # Only keep_vba for macro-enabled files (.xlsm), not regular .xlsx
+        buf = io.BytesIO(file_bytes)
         is_macro = original_name.lower().endswith('.xlsm')
-        wb = load_workbook(file_buffer, keep_vba=is_macro, data_only=False)
+        wb = load_workbook(buf, keep_vba=is_macro, data_only=False)
 
         filled_count = 0
         for u in updates:
             sheet_name = u.get('sheetName', '')
             cell_ref = u.get('cellRef', '')
             value = u.get('value', '')
-            valid_options = u.get('validOptions')  # list of valid dropdown values
 
             if not cell_ref or not value:
                 continue
 
-            # Find the target sheet(s)
+            col, row = parse_cell_ref(cell_ref)
+            if col is None:
+                print(f"  [SKIP] Invalid cell ref: {cell_ref}")
+                continue
+
+            # Find target sheet(s)
             target_sheets = []
             if sheet_name:
                 if sheet_name in wb.sheetnames:
@@ -269,27 +302,21 @@ def fill_excel():
 
             for sn in target_sheets:
                 ws = wb[sn]
+                target = find_target_cell(ws, row, col)
 
-                # Validate dropdown value if options provided
-                if valid_options and isinstance(valid_options, list) and len(valid_options) > 0:
-                    if value not in valid_options:
-                        print(f"  [WARN] {cell_ref} in {sn}: '{value}' not in valid options, writing anyway")
+                if target is None:
+                    continue
 
-                # Get the writable cell (handles merged cells)
-                cell = get_writable_cell(ws, cell_ref)
-
-                # Log what was there before
-                old_val = cell.value
-                if old_val is not None and str(old_val).strip() != '':
-                    print(f"  [OVERWRITE] {sn}!{cell_ref}: '{str(old_val)[:30]}' -> '{value[:50]}'")
+                actual_ref = target.coordinate
+                if actual_ref != cell_ref:
+                    print(f"  [REDIRECT] {cell_ref} -> {actual_ref} = '{value[:50]}'")
                 else:
-                    print(f"  [OK] {sn}!{cell_ref} = '{value[:50]}'")
+                    print(f"  [OK] {sn}!{actual_ref} = '{value[:50]}'")
 
-                # Write the value — trust Claude's cell identification
-                cell.value = value
+                target.value = value
                 filled_count += 1
 
-        # Save to BytesIO buffer
+        # Save
         output = io.BytesIO()
         wb.save(output)
         wb.close()
@@ -299,7 +326,6 @@ def fill_excel():
         if output_size == 0:
             return jsonify({'error': 'Generated file is empty'}), 500
 
-        # Determine filename and mimetype
         base, ext = os.path.splitext(original_name)
         if is_macro:
             ext = '.xlsm'
@@ -311,15 +337,12 @@ def fill_excel():
 
         print(f"[fill-excel] {filled_count} cells written, output={output_size} bytes -> {out_name}")
 
-        return send_file(
-            output,
-            mimetype=mime,
-            as_attachment=True,
-            download_name=out_name
-        )
+        return send_file(output, mimetype=mime, as_attachment=True, download_name=out_name)
 
     except Exception as e:
         print(f"[fill-excel] ERROR: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -329,13 +352,6 @@ def fill_excel():
 
 @app.route('/api/fill-pdf', methods=['POST'])
 def fill_pdf():
-    """
-    Receives:
-      - file: the original PDF file
-      - updates: JSON string — array of {fieldName, value}
-    Returns:
-      - The modified PDF file
-    """
     try:
         file = request.files.get('file')
         updates_json = request.form.get('updates', '[]')
@@ -344,11 +360,13 @@ def fill_pdf():
         if not file:
             return jsonify({'error': 'No file provided'}), 400
 
-        reader = PdfReader(file)
+        file_bytes = file.read()
+        print(f"[fill-pdf] Received: {file.filename} ({len(file_bytes)} bytes), {len(updates)} updates")
+
+        reader = PdfReader(io.BytesIO(file_bytes))
         writer = PdfWriter()
         writer.append_pages_from_reader(reader)
 
-        # Fill form fields
         filled = 0
         for u in updates:
             field_name = u.get('fieldName', '')
@@ -357,18 +375,18 @@ def fill_pdf():
                 try:
                     writer.update_page_form_field_values(None, {field_name: value})
                     filled += 1
-                except Exception:
-                    pass
+                    print(f"  [OK] {field_name} = '{value[:50]}'")
+                except Exception as e:
+                    print(f"  [SKIP] {field_name}: {e}")
 
         output = io.BytesIO()
         writer.write(output)
         output.seek(0)
 
-        original_name = file.filename or 'document.pdf'
-        base, _ = os.path.splitext(original_name)
-        out_name = f"{base}_complété.pdf"
+        base, _ = os.path.splitext(file.filename or 'document.pdf')
+        out_name = f"{base}_complete.pdf"
 
-        print(f"[fill-pdf] {filled} fields written → {out_name}")
+        print(f"[fill-pdf] {filled} fields written -> {out_name}")
         return send_file(output, as_attachment=True, download_name=out_name,
                          mimetype='application/pdf')
 
@@ -383,11 +401,6 @@ def fill_pdf():
 
 @app.route('/api/recap-pdf', methods=['POST'])
 def recap_pdf():
-    """
-    Receives JSON body:
-      { fileName, companyName, fields: [{label, value}], contact: {name, role, email, phone} }
-    Returns: a styled recap PDF
-    """
     try:
         data = request.get_json()
         fields = data.get('fields', [])
@@ -404,30 +417,34 @@ def recap_pdf():
         orange = HexColor('#F47458')
         dark = HexColor('#1a1a2e')
 
-        title_style = ParagraphStyle('Title', parent=styles['Heading1'],
+        title_style = ParagraphStyle('LioraTitle', parent=styles['Heading1'],
                                      textColor=orange, fontSize=16, spaceAfter=6)
-        sub_style = ParagraphStyle('Sub', parent=styles['Normal'],
+        sub_style = ParagraphStyle('LioraSub', parent=styles['Normal'],
                                    textColor=HexColor('#666666'), fontSize=9)
-        label_style = ParagraphStyle('Label', parent=styles['Normal'],
+        note_style = ParagraphStyle('LioraNote', parent=styles['Normal'],
+                                    textColor=HexColor('#cc0000'), fontSize=8,
+                                    fontName='Helvetica-Bold', spaceAfter=12)
+        label_style = ParagraphStyle('LioraLabel', parent=styles['Normal'],
                                      fontSize=9, textColor=HexColor('#333333'),
                                      fontName='Helvetica-Bold')
-        value_style = ParagraphStyle('Value', parent=styles['Normal'],
+        value_style = ParagraphStyle('LioraValue', parent=styles['Normal'],
                                      fontSize=9, textColor=dark)
 
         elements = []
-        elements.append(Paragraph(f"FICHE FOURNISSEUR — {company}", title_style))
+        elements.append(Paragraph(f"FICHE FOURNISSEUR - {company}", title_style))
         elements.append(Paragraph(
-            f"Fichier : {file_name} — {time.strftime('%d/%m/%Y')}", sub_style))
-        elements.append(Spacer(1, 10))
+            f"Fichier : {file_name} - {time.strftime('%d/%m/%Y')}", sub_style))
+        elements.append(Spacer(1, 6))
+        elements.append(Paragraph(
+            "Donnees a reporter dans le document original", note_style))
 
-        # Build table
         table_data = []
         for f in fields:
             label = f.get('label', '')
             value = f.get('value', '')
             table_data.append([
                 Paragraph(label, label_style),
-                Paragraph(value or '—', value_style)
+                Paragraph(value or '-', value_style)
             ])
 
         if table_data:
@@ -440,10 +457,9 @@ def recap_pdf():
             ]))
             elements.append(t)
 
-        # Signature
         elements.append(Spacer(1, 20))
         if contact:
-            sig = f"<b>{contact.get('name', '')}</b> — {contact.get('role', '')}<br/>"
+            sig = f"<b>{contact.get('name', '')}</b> - {contact.get('role', '')}<br/>"
             sig += f"{contact.get('email', '')} | {contact.get('phone', '')}"
             elements.append(Paragraph(sig, sub_style))
 
@@ -451,6 +467,7 @@ def recap_pdf():
         output.seek(0)
 
         base, _ = os.path.splitext(file_name)
+        print(f"[recap-pdf] Generated for {file_name}, {len(fields)} fields")
         return send_file(output, as_attachment=True,
                          download_name=f"{base}_recap.pdf",
                          mimetype='application/pdf')
@@ -474,7 +491,6 @@ def health():
 # ---------------------------------------------------------------------------
 
 def find_free_port(start=5000):
-    """Find the first available port starting from `start`."""
     for port in range(start, start + 100):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
@@ -486,7 +502,6 @@ def find_free_port(start=5000):
 
 
 def open_browser(port):
-    """Open the app in the default browser after a short delay."""
     time.sleep(1.2)
     webbrowser.open(f'http://127.0.0.1:{port}')
 
@@ -494,19 +509,13 @@ def open_browser(port):
 def main():
     port = find_free_port(5000)
     print(f"""
-    ╔══════════════════════════════════════════╗
-    ║   Liora — Fiche Fournisseur             ║
-    ║   Auto-Complete v1.0                    ║
-    ║                                          ║
-    ║   Serveur démarré sur le port {port}       ║
-    ║   http://127.0.0.1:{port}                  ║
-    ╚══════════════════════════════════════════╝
+    =============================================
+      Liora - Fiche Fournisseur Auto-Complete
+      Serveur demarre sur le port {port}
+      http://127.0.0.1:{port}
+    =============================================
     """)
-
-    # Open browser in a thread so it doesn't block Flask
     threading.Thread(target=open_browser, args=(port,), daemon=True).start()
-
-    # Run Flask (use_reloader=False is critical for PyInstaller)
     app.run(host='127.0.0.1', port=port, debug=False, use_reloader=False)
 
 
